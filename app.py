@@ -1,24 +1,29 @@
+import os
 from retriever.simple_rag import run_simple_rag
 from evaluator.scorer import score_response, answer_length, keyword_overlap
+import glob
 
-def load_prompts(filepath="prompts/query_prompts.txt"):
-    with open(filepath, "r", encoding="utf-8") as f:
-        return [line.strip() for line in f if line.strip()]
-    
+def evaluate_multiple_tf_files(tf_folder):
+    tf_paths = glob.glob(f"{tf_folder}/*.tf")
+    combined_content = ""
 
-def evaluate_tf_file(tf_path):
-    print(f"\nEvaluating file: {tf_path}")
-    print("=" * 40)
+    for path in tf_paths:
+        with open(path, "r", encoding="utf-8") as f:
+            tf_code = f.read()
+        combined_content += f"\n#File: {os.path.basename(path)}\n{tf_code}\n"
 
-    simple_answer = run_simple_rag(tf_path)
+    print(f"\nEvaluating .tf files from: {tf_folder}")
+    print("=" * 60)
+
+    simple_answer = run_simple_rag(tf_text=combined_content)
 
     print("\n--- Simple RAG ---")
     print(simple_answer)
 
     print("\n--- Metrics ---")
-    print(f"Score: {score_response(tf_path, simple_answer):.2f}")
+    print(f"Score: {score_response(combined_content, simple_answer):.2f}")
     print(f"Length: {answer_length(simple_answer)} tokens")
-    print(f"Keyword Overlap: {keyword_overlap(tf_path, simple_answer):.2f}")
+    #print(f"Keyword Overlap: {keyword_overlap(combined_content, simple_answer):.2f}")
 
 if __name__ == "__main__":
-    evaluate_tf_file("sample_tf/variables.tf")
+    evaluate_multiple_tf_files("sample_tf")

@@ -20,8 +20,8 @@ def connect_db():
 
 embedder = SentenceTransformer('all-MiniLM-L6-v2')
 
-def get_context_from_db(tf_text, top_k=3):
-    embedding = embedder.encode(tf_text).tolist()
+def get_context_from_db(tf_content, top_k=3):
+    embedding = embedder.encode(tf_content).tolist()
     conn = connect_db()
 
     embedding_str = f"[{','.join(map(str, embedding))}]"
@@ -41,9 +41,14 @@ def get_context_from_db(tf_text, top_k=3):
 
 def build_prompt(context_docs, tf_content):
     context_snippets = "\n---\n".join(context_docs)
-    return f"""You are a Terraform assistant. You are given a `variables.tf file and some Terraform best practices.
-Suggest improvements or highlight issues in the provided code based on the context.
-
+    return f"""You are an expert Terraform code reviewer.
+Below are Terraform best practices and reference examples. Your task is to analyze the given `variables.tf` file and identify **any mistakes, anti-patterns, or violations of best practices**.
+Be strict and highlight:
+- Missing descriptions
+- Hardcoded values or secrets
+- Wrong data types (e.g., string instead of bool)
+- Lack of validations
+- Any other Terraform or IBM Cloud-specific issues
 Context:
 {context_snippets}
 
@@ -54,13 +59,10 @@ Code to review:
 
 ---
 
-Suggestions:"""
+Please list all the issues and provide recommendations:"""
 
-def run_simple_rag(tf_file_path):
-    with open(tf_file_path, "r", encoding="utf-8") as f:
-        tf_content = f.read()
-
-    context_docs = get_context_from_db(tf_content, top_k=3)
-    prompt = build_prompt(context_docs, tf_content)
+def run_simple_rag(tf_text: str):
+    context_docs = get_context_from_db(tf_text, top_k=3)
+    prompt = build_prompt(context_docs, tf_text)
 
     return query_granite(prompt)
