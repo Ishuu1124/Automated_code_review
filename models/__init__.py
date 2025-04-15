@@ -1,0 +1,1 @@
+from .granite_model import query_granite
