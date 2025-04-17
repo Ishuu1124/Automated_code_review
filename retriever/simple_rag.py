@@ -44,11 +44,11 @@ def build_prompt(context_docs, tf_content):
     return f"""You are an expert Terraform code reviewer.
 Below are Terraform best practices and reference examples. Your task is to analyze the given `variables.tf` file and identify **any mistakes, anti-patterns, or violations of best practices**.
 Be strict and highlight:
-- Missing descriptions
 - Hardcoded values or secrets
 - Wrong data types (e.g., string instead of bool)
 - Lack of validations
 - Any other Terraform or IBM Cloud-specific issues
+- Do not give any changes or suggestions regarding variable description for now
 Context:
 {context_snippets}
 
