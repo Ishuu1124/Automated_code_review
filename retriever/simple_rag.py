@@ -1,68 +1,72 @@
 import os
+import time
 import psycopg
 from dotenv import load_dotenv
-from sentence_transformers import SentenceTransformer
 from models.granite_model import query_granite
+from utils.chunker import chunk_text
+from sentence_transformers import SentenceTransformer
 
 load_dotenv()
-DB_NAME = os.getenv("DB_NAME")
-DB_USER = os.getenv("DB_USER")
-DB_PASSWORD = os.getenv("DB_PASSWORD")
-DB_HOST = os.getenv("DB_HOST")
-DB_PORT = os.getenv("DB_PORT")
+model = SentenceTransformer("all-MiniLM-L6-v2")
 
-print("DB_NAME:", DB_NAME)
-print("DB_USER:", DB_USER)
+def get_pgvector_connection():
+    return psycopg.connect(
+        dbname=os.getenv("DB_NAME"),
+        user=os.getenv("DB_USER"),
+        password=os.getenv("DB_PASSWORD"),
+        host=os.getenv("DB_HOST"),
+        port=os.getenv("DB_PORT")
+    )
 
-DB_CONN = f"dbname={DB_NAME} user={DB_USER} password={DB_PASSWORD} host={DB_HOST} port={DB_PORT}"
-def connect_db():
-    return psycopg.connect(DB_CONN)
-
-embedder = SentenceTransformer('all-MiniLM-L6-v2')
-
-def get_context_from_db(tf_content, top_k=3):
-    embedding = embedder.encode(tf_content).tolist()
-    conn = connect_db()
-
-    embedding_str = f"[{','.join(map(str, embedding))}]"
-
+def get_top_k_chunks(query_embedding, k=20):
+    conn = get_pgvector_connection()
     with conn.cursor() as cur:
         cur.execute("""
-            SELECT content, embedding <=> %s::vector AS distance
+            SELECT path, chunk_index, content, content_hash, embedding
             FROM docs
-            ORDER BY distance ASC
-            LIMIT %s
-        """, (embedding_str, top_k))
-
-        results = cur.fetchall()
-
+            ORDER BY embedding <-> %s::vector
+            LIMIT %s;
+        """, (query_embedding.tolist(), k)) 
+        context_chunks = cur.fetchall()
     conn.close()
-    return [row[0] for row in results]
+    return context_chunks
 
-def build_prompt(context_docs, tf_content):
-    context_snippets = "\n---\n".join(context_docs)
-    return f"""You are an expert Terraform code reviewer.
-Below are Terraform best practices and reference examples. Your task is to analyze the given `variables.tf` file and identify **any mistakes, anti-patterns, or violations of best practices**.
-Be strict and highlight:
+def build_prompt(context_docs, chunk):
+    context = "\n---\n".join([doc[2] for doc in context_docs])
+    return f"""You are an expert Terraform code reviewer focused on enforcing internal standards for `variables.tf` files used in IBM Cloud infrastructure.
+Analyze the following `variables.tf` file and identify **mistakes, anti-patterns, or violations** of Terraform and IBM Cloud best practices. Be **strict** and focus only on:
+
 - Hardcoded values or secrets
-- Wrong data types (e.g., string instead of bool)
-- Lack of validations
-- Any other Terraform or IBM Cloud-specific issues
-- Do not give any changes or suggestions regarding variable description for now
+- Incorrect or overly broad data types (e.g., using `string` instead of `bool`)
+- Missing or weak validations
+- Naming convention violations (e.g., inconsistent or unclear variable names like `vpc_resource_tags`)
+- Ordering issues — required variables must appear **at the top** of the file
+- Avoid any feedback on variable **descriptions**
+- Do not summary of the key variables
+Keep your response **concise and actionable**, avoiding unnecessary explanation or repetition.
+
 Context:
-{context_snippets}
+{context}
 
----
+Terraform file to review:
+{chunk}
 
-Code to review:
-{tf_content}
+Answer:"""
 
----
+def run_simple_rag(tf_text: str) -> str:
+    start_time = time.time()
 
-Please list all the issues and provide recommendations:"""
+    review_chunks = chunk_text(tf_text, max_tokens=200)
 
-def run_simple_rag(tf_text: str):
-    context_docs = get_context_from_db(tf_text, top_k=3)
-    prompt = build_prompt(context_docs, tf_text)
+    all_responses = []
+    for chunk in review_chunks:
+        embedding = model.encode([chunk])[0]
+        context_docs = get_top_k_chunks(embedding, k=20)
+        prompt = build_prompt(context_docs, chunk)
+        response = query_granite(prompt)
+        all_responses.append(response)
 
-    return query_granite(prompt)
+    end_time = time.time()
+    duration = end_time - start_time
+    print(f"Granite response generation took {duration:.2f} seconds.")
+    return "\n\n".join(all_responses)

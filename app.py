@@ -1,4 +1,6 @@
 import os
+import sys
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from retriever.simple_rag import run_simple_rag
 from evaluator.scorer import score_response, answer_length, keyword_overlap
 import glob
