@@ -51,3 +51,17 @@ def evaluate_tf_from_github(repo_url: str):
     print("\n--- Metrics ---")
     print(f"Score: {score_response(content, simple_answer):.2f}")
     print(f"Length: {answer_length(simple_answer)} tokens")
+    
+def evaluate(code: str):
+    print(f"\nEvaluating...")
+    print("=" * 60)
+
+    simple_answer = run_simple_rag(tf_text=code)
+
+    print("\n--- Simple RAG ---")
+    print(simple_answer)
+
+    print("\n--- Metrics ---")
+    print(f"Score: {score_response(code, simple_answer):.2f}")
+    print(f"Length: {answer_length(simple_answer)} tokens")
+    return simple_answer
