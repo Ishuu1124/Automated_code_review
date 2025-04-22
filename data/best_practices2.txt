@@ -1,0 +1,39 @@
+Best practices include:
+
+Use full names rather than acronyms to make it easier for users not familiar with the products or services to understand what they refer to. 
+For example: secrets_manager instead of sm, event_notification instead of en. However, industry-wide naming conventions, 
+such as vpc for Virtual Private Cloud or cos for Object Storage, are acceptable and can be used to maintain consistency with established standards.
+
+Use underscores for separation. Instead of camelCase, use snake_case for better alignment with Terraform conventions.
+
+Be consistent in ordering of similar terms. For instance, id or name is always located at the end of a variable name: resource_group_id and not id_resource_group.
+
+Start boolean variable names with verbs. Examples: use_private_endpoint, force_delete_storage, disable_outbound_traffic_protection
+
+Avoid ambiguity about resource creation. When it is not obvious through the context, clearly indicate when a variable refers to an existing infrastructure resource, 
+as opposed to a resource that will be created by the module or DA. A convention is to prefix the name of the variable with existing_. 
+For example, existing_kms_instance_name for a variable that take as input the name of a key management service that already exists in the account. 
+This clearly re-enforce the fact that the module does not create the key management service instance, as the name kms_instance_name could be a better choice.
+
+Contextualize inputs: For multi-service modules or DAs, use the name of the service as prefix of the variable names. 
+An example is the ocp_all_inclusive module that allows to create an Openshift cluster and configure various side aspects of it, such as the log analysis aspects. 
+All inputs related to log analysis are prefixed with log_analysis, such as log_analysis_secret_name, log_analysis_instance_region. 
+However, for modules that handles only one type of resource, context is generally clear enough, and prefixing variable name is not recommended to avoid artificial redundancy.
+
+Group variable definitions: Use a dedicated variables.tf file to organize all input variables, improving discoverability and reusability. 
+For more information on module structure, see Module and deployable architecture structure guidelines.
+
+Co-locate related variables: Group related inputs logically, this helps the reader discover related variables quickly. 
+For example, variables.tf in the ocp-all-inclusive module clearly group together variables related to VPC, Cluster definition, Key management, Log analysis.
+
+Order variable for usability: Analyze and place frequently used variables, like resource_group, and region, at the top of the variables.tf file.
+
+Leverage defaults: Define sensible defaults for most variables to simplify adoption without requiring detailed user input. 
+This enables users to quickly start using the module with just a few required variables to set.
+
+Ensure defaults aligns with common usage patterns: If multiple common use cases are identified, consider implementing variations of the module defaults tailored to each use case. 
+This approach is widely adopted in the community-maintained modules at terraform-ibm-module. 
+For example, the terraform-ibm-icd-postgresql module define defaults that allows most users to quickly start with a cost-effective and publicly accessible PostgreSQL database instance. 
+Additionally, the sub-module located in the fscloud directory defines stricter defaults designed for compliance-focused use cases, 
+such as configuring the instance to restrict public internet access by default.
+
