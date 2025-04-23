@@ -2,7 +2,8 @@ import json
 import redis
 
 from celery_app.worker import app, settings
-from utils import get_variables_code, connect_repo
+from github_utils import get_variables_code, connect_repo
+from db.indexer import index_docs
 
 from ghub import evaluate
 
@@ -38,6 +39,7 @@ def process_webhook(payload_json, command):
     # Checking Redis cache
     cache_value = redis_client.hget("Tf cache", redis_key)
     if cache_value is None:
+        index_docs("guide")
         result = evaluate(code)
         
         # Populating cache

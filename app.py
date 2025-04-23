@@ -29,5 +29,5 @@ def evaluate_multiple_tf_files(tf_folder):
     #print(f"Keyword Overlap: {keyword_overlap(combined_content, simple_answer):.2f}")
 
 if __name__ == "__main__":
-    # evaluate_multiple_tf_files("sample_tf")
+    #evaluate_multiple_tf_files("sample_tf")
     evaluate_tf_from_github('https://github.com/terraform-ibm-modules/terraform-ibm-cos')
