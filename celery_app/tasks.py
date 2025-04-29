@@ -1,21 +1,15 @@
 import json
 import redis
-
 from celery_app.worker import app, settings
 from github_utils import get_variables_code, connect_repo
 from db.indexer import index_docs
-
 from ghub import evaluate
-
 redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
-
 @app.task(
-    # Name needs to be the same as defined in webhook receiver.
     name="tasks.process_tf"
 )
 def process_webhook(payload_json, command):
     data = json.loads(payload_json)
-    # data = payload['data']
     owner = data['repository']['owner']['login']
     repo_name = data['repository']['name']
     pr_num = data["issue"]["number"]
@@ -23,11 +17,9 @@ def process_webhook(payload_json, command):
     pull = repository.get_pull(pr_num)
     commit_id = pull.head.sha
     issue = repository.get_issue(pr_num)
-    redis_key = commit_id+command[1:]
-    
-    # Creating placeholder comment
+    redis_key = commit_id + command[1:]
+    # Create a placeholder comment
     comment_id = issue.create_comment("Request received, processing...").id
-    
     code = get_variables_code(repository, pull)
     if code is None:
         issue.get_comment(comment_id).edit("No content found in variables.tf")
@@ -35,26 +27,27 @@ def process_webhook(payload_json, command):
             "status": "processed",
             "result": "No content."
         }
-    
-    # Checking Redis cache
+    # Check Redis cache
     cache_value = redis_client.hget("Tf cache", redis_key)
     if cache_value is None:
         index_docs("guide")
         result = evaluate(code)
-        
-        # Populating cache
+        # Populate cache
         redis_client.hset("Tf cache", redis_key, json.dumps(result))
-        # Setting cache expiry time (TTL)
+        # Setting cache expiry time (TTL) for the entire "Tf cache" hash
         redis_client.expire("Tf cache", 300)
-        
-        # Can be an issue if second request is submitted before first request is resolved.
-        
     else:
         result = json.loads(cache_value)
-
-    final_output = result.get("final_review", str(result))
-    
-    # Editing the placeholder comment
+    # Prepare final output for GitHub comment
+    final_review = result.get("final_review", "")
+    corrected_code = result.get("corrected_code", "")
+    final_output = ""
+    if final_review:
+        final_output += f"## Final Review\n\n{final_review}\n\n"
+    if corrected_code:
+        final_output += f"## Corrected variables.tf\n\n```hcl\n{corrected_code}\n```"
+    if not final_output:
+        final_output = "No meaningful review or corrected code was generated."
+    # Edit the placeholder comment with the final output
     issue.get_comment(comment_id).edit(final_output)
-    
     return {"status": "processed", "result": final_output}

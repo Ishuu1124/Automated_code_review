@@ -4,11 +4,13 @@ from github import Github
 import os
 from retriever.simple_rag import run_simple_rag
 from evaluator.scorer import score_response, answer_length, keyword_overlap
+
 load_dotenv()
 VALID_NETLOCS = [
     "github.com",
     "www.github.com",
 ]
+
 def parse_github_url(url: str):
     try:
         if not url.startswith(("http://", "https://")):
@@ -21,6 +23,7 @@ def parse_github_url(url: str):
         return (owner, repository_name)
     except Exception as e:
         raise ValueError(f"Error parsing GitHub PR URL!")
+    
 def evaluate_tf_from_github(repo_url: str):
     (owner, repo_name) = parse_github_url(repo_url)
     g = Github(os.getenv("GITHUB_TOKEN"))
@@ -40,15 +43,27 @@ def evaluate_tf_from_github(repo_url: str):
     print("\n--- Metrics ---")
     print(f"Score: {score_response(content, result['final_review']):.2f}")
     print(f"Length: {answer_length(result['final_review'])} tokens")
+
 def evaluate(code: str):
     print(f"\nEvaluating...")
     print("=" * 60)
-    result = run_simple_rag(tf_text=code)
+    try:
+        result = run_simple_rag(tf_text=code)
+    except Exception as e:
+        print(f"Evaluation failed: {e}")
+        result = None
+    if not isinstance(result, dict):
+        result = {}
+    final_review = result.get("final_review", "No review generated.")
+    corrected_code = result.get("corrected_code", "")
     print("\n--- Final Review ---")
-    print(result["final_review"])
+    print(final_review)
     print("\n--- Corrected variables.tf ---")
-    print(result["corrected_code"])
+    print(corrected_code)
     print("\n--- Metrics ---")
-    print(f"Score: {score_response(code, result['final_review']):.2f}")
-    print(f"Length: {answer_length(result['final_review'])} tokens")
-    return result
+    print(f"Score: {score_response(code, final_review):.2f}")
+    print(f"Length: {answer_length(final_review)} tokens")
+    return {
+        "final_review": final_review,
+        "corrected_code": corrected_code
+    }

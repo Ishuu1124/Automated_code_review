@@ -1,12 +1,23 @@
 import re
-
-def count_tokens(text: str) -> int:
-    return len(re.findall(r"\S+", text))  
-
-def chunk_text(text: str, max_tokens: int = 200) -> list:
-    words = re.findall(r"\S+", text)
+def chunk_text(tf_text: str, max_chars: int = 1500) -> list:
+    """
+    Splits the Terraform text into chunks containing full variable blocks.
+    Groups 1–3 variable blocks per chunk without exceeding max_chars.
+    """
+    # Find all variable blocks
+    variable_blocks = re.findall(r'(variable\s+".+?"\s*\{[^}]+\})', tf_text, re.DOTALL)
     chunks = []
-    for i in range(0, len(words), max_tokens):
-        chunk = " ".join(words[i:i + max_tokens])
-        chunks.append(chunk)
+    current_chunk = ""
+    for block in variable_blocks:
+        block = block.strip()
+        # Check if adding this block would exceed the limit
+        if len(current_chunk) + len(block) > max_chars:
+            if current_chunk:
+                chunks.append(current_chunk.strip())
+            current_chunk = block
+        else:
+            current_chunk += "\n\n" + block
+
+    if current_chunk:
+        chunks.append(current_chunk.strip())
     return chunks
