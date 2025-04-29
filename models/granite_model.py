@@ -1,7 +1,7 @@
 import requests
 
 OLLAMA_URL = "http://localhost:11434/api/generate"
-MODEL_NAME = "granite3.2"
+MODEL_NAME = "granite3.3"
 
 def query_granite(prompt: str) -> str:
     try:

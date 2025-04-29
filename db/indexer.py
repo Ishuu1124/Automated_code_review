@@ -10,7 +10,7 @@ from utils.chunker import chunk_text
 from db.pgvector_conn import get_pgvector_connection
 
 load_dotenv()
-DATA_DIR = "data"
+DATA_DIR = "guide"
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
 def init_db(conn):

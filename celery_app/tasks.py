@@ -43,16 +43,18 @@ def process_webhook(payload_json, command):
         result = evaluate(code)
         
         # Populating cache
-        redis_client.hset("Tf cache", redis_key, result)
+        redis_client.hset("Tf cache", redis_key, json.dumps(result))
         # Setting cache expiry time (TTL)
-        redis_client.hexpire("Tf cache", 300, redis_key)
+        redis_client.expire("Tf cache", 300)
         
         # Can be an issue if second request is submitted before first request is resolved.
         
     else:
-        result = str(cache_value)
+        result = json.loads(cache_value)
+
+    final_output = result.get("final_review", str(result))
     
     # Editing the placeholder comment
-    issue.get_comment(comment_id).edit(result)
+    issue.get_comment(comment_id).edit(final_output)
     
-    return {"status": "processed", "result": result}
+    return {"status": "processed", "result": final_output}
