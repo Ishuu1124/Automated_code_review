@@ -1,6 +1,7 @@
 import json
 import redis
 
+from logs.redis_logger import logger
 from celery_app.worker import app, settings
 from utils import get_variables_code, connect_repo
 
@@ -37,17 +38,25 @@ def process_webhook(payload_json, command):
     
     # Checking Redis cache
     cache_value = redis_client.hget("Tf cache", redis_key)
+    ttl = 300
+    
     if cache_value is None:
+        logger.info(f"Cache miss for key: {redis_key}")
         result = evaluate(code)
         
-        # Populating cache
-        redis_client.hset("Tf cache", redis_key, result)
-        # Setting cache expiry time (TTL)
-        redis_client.hexpire("Tf cache", 300, redis_key)
-        
+        try:
+            # Populating cache
+            redis_client.hset("Tf cache", redis_key, result)
+            # Setting cache expiry time (TTL)
+            redis_client.hexpire("Tf cache", ttl, redis_key)
+            logger.info(f"Set cache for key: {redis_key}, expires in {ttl}s")
+        except redis.RedisError as e:
+            logger.error(f"Redis error on set({redis_key}): {e}")
         # Can be an issue if second request is submitted before first request is resolved.
         
     else:
+        redis_client.hexpire("Tf cache", ttl, redis_key)
+        logger.info(f"Cache hit for key: {redis_key}, expires in {ttl}s")
         result = str(cache_value)
     
     # Editing the placeholder comment
