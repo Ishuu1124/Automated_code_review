@@ -3,19 +3,15 @@ import redis
 
 from logs.redis_logger import logger
 from celery_app.worker import app, settings
-from utils import get_variables_code, connect_repo
-
+from github_utils import get_variables_code, connect_repo
+from db.indexer import index_docs
 from ghub import evaluate
-
 redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
-
 @app.task(
-    # Name needs to be the same as defined in webhook receiver.
     name="tasks.process_tf"
 )
 def process_webhook(payload_json, command):
     data = json.loads(payload_json)
-    # data = payload['data']
     owner = data['repository']['owner']['login']
     repo_name = data['repository']['name']
     pr_num = data["issue"]["number"]
@@ -23,11 +19,9 @@ def process_webhook(payload_json, command):
     pull = repository.get_pull(pr_num)
     commit_id = pull.head.sha
     issue = repository.get_issue(pr_num)
-    redis_key = commit_id+command[1:]
-    
-    # Creating placeholder comment
+    redis_key = commit_id + command[1:]
+    # Create a placeholder comment
     comment_id = issue.create_comment("Request received, processing...").id
-    
     code = get_variables_code(repository, pull)
     if code is None:
         issue.get_comment(comment_id).edit("No content found in variables.tf")
@@ -35,8 +29,7 @@ def process_webhook(payload_json, command):
             "status": "processed",
             "result": "No content."
         }
-    
-    # Checking Redis cache
+    # Check Redis cache
     cache_value = redis_client.hget("Tf cache", redis_key)
     ttl = 300
     

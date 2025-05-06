@@ -5,27 +5,20 @@ import os
 from retriever.simple_rag import run_simple_rag
 from evaluator.scorer import score_response, answer_length, keyword_overlap
 
-
 load_dotenv()
-
 VALID_NETLOCS = [
     "github.com",
     "www.github.com",
-    ]
+]
 
 def parse_github_url(url: str):
     try:
-        if not url.startswith(("http://","https://")):
+        if not url.startswith(("http://", "https://")):
             url = "https://" + url.lstrip("/")
         parsed_url = urlparse(url)
-
-        # Checking if valid GitHub URL
         if parsed_url.netloc not in VALID_NETLOCS:
             raise ValueError("Not a valid GitHub URL!")
-        
-        # Extracting URL components
         path_parts = parsed_url.path.strip("/").split("/")
-
         owner, repository_name = path_parts[0], path_parts[1]
         return (owner, repository_name)
     except Exception as e:
@@ -42,26 +35,35 @@ def evaluate_tf_from_github(repo_url: str):
     content = f.decoded_content.decode()
     print(f"\nEvaluating variables.tf file from: {repo_url}")
     print("=" * 60)
-
-    simple_answer = run_simple_rag(tf_text=content)
-
-    print("\n--- Simple RAG ---")
-    print(simple_answer)
-
+    result = run_simple_rag(tf_text=content)
+    print("\n--- Final Review ---")
+    print(result["final_review"])
+    print("\n--- Corrected variables.tf ---")
+    print(result["corrected_code"])
     print("\n--- Metrics ---")
-    print(f"Score: {score_response(content, simple_answer):.2f}")
-    print(f"Length: {answer_length(simple_answer)} tokens")
-    
+    print(f"Score: {score_response(content, result['final_review']):.2f}")
+    print(f"Length: {answer_length(result['final_review'])} tokens")
+
 def evaluate(code: str):
     print(f"\nEvaluating...")
     print("=" * 60)
-
-    simple_answer = run_simple_rag(tf_text=code)
-
-    print("\n--- Simple RAG ---")
-    print(simple_answer)
-
+    try:
+        result = run_simple_rag(tf_text=code)
+    except Exception as e:
+        print(f"Evaluation failed: {e}")
+        result = None
+    if not isinstance(result, dict):
+        result = {}
+    final_review = result.get("final_review", "No review generated.")
+    corrected_code = result.get("corrected_code", "")
+    print("\n--- Final Review ---")
+    print(final_review)
+    print("\n--- Corrected variables.tf ---")
+    print(corrected_code)
     print("\n--- Metrics ---")
-    print(f"Score: {score_response(code, simple_answer):.2f}")
-    print(f"Length: {answer_length(simple_answer)} tokens")
-    return simple_answer
+    print(f"Score: {score_response(code, final_review):.2f}")
+    print(f"Length: {answer_length(final_review)} tokens")
+    return {
+        "final_review": final_review,
+        "corrected_code": corrected_code
+    }

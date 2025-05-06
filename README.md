@@ -41,7 +41,7 @@ Update these values based on your PostgreSQL setup.
 ### 3. Index Reference Documents
 Run the following to index documents into the vector database:
 ```bash
-python indexer.py
+python db/indexer.py
 ```
 This step creates embeddings and stores them in PostgreSQL using `pgvector`.
 ---
