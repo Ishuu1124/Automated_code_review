@@ -1,8 +1,9 @@
 # Terraform RAG Evaluation with Granite 3.2
 - This project compares Terraform code files (`variables.tf`) against best practices using **Simple RAG (Retrieval-Augmented Generation)** powered by **Granite 3.2** LLM (via Ollama). The system retrieves reference context from ingested `.txt` and `.tf` documents, and evaluates target Terraform files for potential improvements.
 - Arcihtecture Diagram:
-![image](https://github.com/user-attachments/assets/42621dfc-675a-42a2-a3a7-b9263cef2312)
 
+
+![image](https://github.com/user-attachments/assets/1e2b333b-7571-4247-8d61-dad197c6a309)
 
 ---
 ## Features
