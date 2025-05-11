@@ -48,6 +48,12 @@ def index_docs(folder=DATA_DIR):
             collection.insert([to_insert["path"], to_insert["chunk_index"], to_insert["content"], to_insert["content_hash"], to_insert["embedding"]])
 
     end_time = time.time()
+    index_params = {
+        "index_type": "IVF_FLAT",
+        "metric_type": "IP",
+        "params": {"nlist": 128}
+    }
+    collection.create_index(field_name="embedding", index_params=index_params)
     print(f"\nTotal files scanned: {total_files}")
     print(f"Chunks updated/indexed: {updated_chunks}")
     print(f"Indexing took {end_time - start_time:.2f} seconds.")

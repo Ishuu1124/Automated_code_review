@@ -14,13 +14,19 @@ MILVUS_PORT = os.getenv("MILVUS_PORT")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 
 def get_milvus_connection():
-    collection = Collection(COLLECTION_NAME)
+    try:
+        if utility.has_collection(COLLECTION_NAME):
+            print(f"Found collection {COLLECTION_NAME}")
+        collection = Collection(COLLECTION_NAME)
+    except Exception as e:
+        print(f"[ERROR] Failed to load collection from Milvus: {e}")
     if not utility.has_collection(COLLECTION_NAME):
         print(f"[ERROR] Collection {COLLECTION_NAME} not found in Milvus!")
     return collection
 
 def get_top_k_chunks(query_embedding, k=5):
     collection = get_milvus_connection()
+    collection.load()
     search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
     search_results = collection.search(
         data=[query_embedding.tolist()],
@@ -57,14 +63,14 @@ def run_simple_rag(tf_text: str) -> dict:
             )
             review_response = query_granite(review_prompt).strip()
             if not review_response or review_response.startswith("[Error"):
-                print(f"[ERROR] No review response for chunk {i}. Review response: {review_response}")
+                print(f"[ERROR] No review response for chunk {i+1}. Review response: {review_response}")
             else:
-                print(f"[INFO] Review response for chunk {i}: {review_response}")
-            all_chunk_feedback.append((i, review_response))
+                print(f"[INFO] Review response for chunk {i+1}: {review_response}")
+            all_chunk_feedback.append((i+1, review_response))
             running_summary.append(review_response)
         except Exception as e:
-            print(f"[ERROR] Failed review for chunk {i}: {e}")
-            all_chunk_feedback.append((i, "[ERROR] Review failed"))
+            print(f"[ERROR] Failed review for chunk {i+1}: {e}")
+            all_chunk_feedback.append((i+1, "[ERROR] Review failed"))
             continue
 
         try:
@@ -75,10 +81,10 @@ def run_simple_rag(tf_text: str) -> dict:
             fix_response = query_granite(fix_prompt).strip()
             corrected_chunks.append(fix_response)
         except Exception as e:
-            print(f"[ERROR] Failed fix for chunk {i}: {e}")
+            print(f"[ERROR] Failed fix for chunk {i+1}: {e}")
             corrected_chunks.append(chunk)
 
-    feedbacks = "\n\n".join([f"Chunk {i}:\n{resp}" for i, resp in all_chunk_feedback])
+    feedbacks = "\n\n".join([f"Chunk {i+1}:\n{resp}" for i, resp in all_chunk_feedback])
     print(f"\n[INFO] Feedbacks collected: {feedbacks}")
     
     try:
