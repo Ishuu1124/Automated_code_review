@@ -1,5 +1,5 @@
-# Terraform RAG Evaluation with Granite 3.2
-- This project compares Terraform code files (`variables.tf`) against best practices using **Simple RAG (Retrieval-Augmented Generation)** powered by **Granite 3.2** LLM (via Ollama). The system retrieves reference context from ingested `.txt` and `.tf` documents, and evaluates target Terraform files for potential improvements.
+# Terraform RAG Evaluation with Granite 3.3
+- This project compares Terraform code files (`variables.tf`) against best practices using **Simple RAG (Retrieval-Augmented Generation)** powered by **Granite 3.3** LLM (via Ollama). The system retrieves reference context from ingested `.txt` and `.tf` documents, and evaluates target Terraform files for potential improvements.
 - Arcihtecture Diagram:
 
 
@@ -7,16 +7,33 @@
 
 ---
 ## Features
-- **Granite 3.2** LLM integration via Ollama.
+- **Granite 3.3** LLM integration via Ollama.
 - Ingests Terraform best practices and examples from `.txt` and `.tf` files.
 - Embeds documents using `sentence-transformers` and stores them in **pgVector (PostgreSQL)**.
 - Retrieves top relevant context to construct prompts for code evaluation.
-- Scores generated suggestions using:
-  - Simple similarity score
-  - Answer length
-  - Keyword overlap
-- CLI-based runner for testing any given `variables.tf` file.
----
+
+
+## 📦 Folder Structure
+
+```bash
+.
+├── db/
+│   └── pgvector_conn.py         # PgVector connection setup
+│   └── indexer.py               # Embeds and indexes best practices in PgVector
+├── retriever/
+│   └── simple_rag.py            # RAG pipeline for review and fix
+├── evaluator/
+│   └── scorer.py                # Basic evaluation scoring utilities
+├── utils/
+│   └── chunker.py               # Text chunking logic
+├── models/
+│   └── granite_model.py         # Granite model wrapper (via Ollama)
+├── guide/
+│   └── bp.txt                   # Best practices for Terraform variable files
+├── ghub.py                      # GitHub integration to review remote PRs
+├── github_utils.py              # Utility functions for GitHub integration
+├── .env                         # Environment variables
+```
 ## Setup Instructions
 ### 1. Install Dependencies
 Make sure you have Python 3.8+ installed.
@@ -26,12 +43,12 @@ pip install -r requirements.txt
 ```
 Ensure you also have the following installed:
 - **PostgreSQL** with `pgvector` extension enabled
-- **Ollama** running locally with the `granite3.2` model pulled
-To pull the model:
+- **Ollama** running locally with the `granite3.3` model pulled
+To run the model:
 ```bash
-ollama pull granite3.2
+ollama run granite3.3
 ```
----
+
 ### 2. Configure Environment Variables
 Create a `.env` file in the root directory with the following:
 ```env
@@ -40,24 +57,59 @@ DB_USER=your_user
 DB_PASSWORD=your_password
 DB_HOST=localhost
 DB_PORT=5432
+GITHUB_BOT_SECRET=
+GITHUB_BOT_ID=
+REDIS_URL=
+CELERY_BROKER_URL=
+CELERY_RESULT_BACKEND=
 ```
 Update these values based on your PostgreSQL setup.
----
-### 3. Index Reference Documents
-Run the following to index documents into the vector database:
-```bash
-python db/indexer.py
+
+### 3. Start PostgreSQL with PgVector
+
+Make sure your local PostgreSQL instance is running and has the `pgvector` extension installed:
+
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
 ```
-This step creates embeddings and stores them in PostgreSQL using `pgvector`.
----
-### 4. Evaluate a Terraform File
-Place the `variables.tf` file you want to analyze inside the `sample_tf/` directory.
-Then run:
-```bash
-python app.py
+
+For running it locally:
 ```
-This will:
-- Retrieve relevant context from the database
-- Generate improvement suggestions using Granite 3.2
-- Print basic evaluation metrics (similarity score, response length)
----
+psql -U <your_user> -d rag_db 
+```
+
+## 🔍 Usage
+
+### Start script
+
+```bash
+./start_celery.sh
+```
+
+This fetches `variables.tf` from the root of the given repo, runs a review, and prints:
+
+* ✅ Review Summary
+* 📝 Suggested Renames
+* 🔧 Corrected Code
+* 📊 Score & Token Count
+
+## 📁 Guide Files
+
+Put all `.txt` documents outlining variable naming conventions, structuring rules, etc., in the `guide/` folder. These serve as context for the review.
+
+## 🧠 Behind the Scenes
+
+* ✅ Embeddings: `all-MiniLM-L6-v2` via `sentence-transformers`
+* 🔍 Vector DB: PostgreSQL + PgVector (local)
+* 🧠 LLM: Granite Code (via Ollama)
+* 📎 RAG: Context retrieved from `guide/*.txt`
+* 🛠 Fixes: LLM rewrites chunks while preserving validation and descriptions
+
+## 🛑 Notes
+
+* Only the `variables.tf` file is currently reviewed.
+* Descriptions and validation blocks are never altered.
+* No extra explanations are included in the final fixed code.
+
+
+
