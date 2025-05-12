@@ -59,6 +59,25 @@ services:
     depends_on:
       - "etcd"
       - "minio"
+  
+  ollama:
+    container_name: ollama
+    image: ollama/ollama:latest
+    volumes:
+      - ${DOCKER_VOLUME_DIRECTORY:-.}/volumes/ollama:/ollama_data
+    ports:
+      - "11434:11434"
+  
+  app:
+    container_name: tf_reviewer
+    build:
+      context: .
+      dockerfile: Dockerfile
+    depends_on:
+      - standalone
+      - ollama
+    env_file:
+      - .env
 
 networks:
   default:

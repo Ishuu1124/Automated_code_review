@@ -1,5 +1,5 @@
 import requests
-OLLAMA_URL = "http://localhost:11434"
+OLLAMA_URL = "http://ollama:11434"
 MODEL_NAME = "granite3.3"
 def query_granite(prompt: str) -> str:
     try:

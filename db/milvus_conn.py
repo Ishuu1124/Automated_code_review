@@ -1,7 +1,7 @@
 from pymilvus import connections, utility, Collection, CollectionSchema, FieldSchema, DataType
 import os
 
-MILVUS_HOST = os.getenv("MILVUS_HOST", "localhost")
+MILVUS_HOST = os.getenv("MILVUS_HOST", "standalone")
 MILVUS_PORT = os.getenv("MILVUS_PORT", "19530")
 COLLECTION_NAME = "docs"
 

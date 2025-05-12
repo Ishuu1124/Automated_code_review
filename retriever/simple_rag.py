@@ -1,6 +1,5 @@
 import os
 import time
-import psycopg
 import numpy as np
 from dotenv import load_dotenv
 from pymilvus import Collection, utility
