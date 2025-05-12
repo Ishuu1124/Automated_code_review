@@ -1,5 +1,7 @@
 import json
 import redis
+
+from logs.redis_logger import logger
 from celery_app.worker import app, settings
 from github_utils import get_variables_code, connect_repo
 from db.indexer import index_docs
@@ -29,25 +31,28 @@ def process_webhook(payload_json, command):
         }
     # Check Redis cache
     cache_value = redis_client.hget("Tf cache", redis_key)
+    ttl = 300
+    
     if cache_value is None:
-        index_docs("guide")
+        logger.info(f"Cache miss for key: {redis_key}")
         result = evaluate(code)
-        # Populate cache
-        redis_client.hset("Tf cache", redis_key, json.dumps(result))
-        # Setting cache expiry time (TTL) for the entire "Tf cache" hash
-        redis_client.expire("Tf cache", 300)
+        
+        try:
+            # Populating cache
+            redis_client.hset("Tf cache", redis_key, result)
+            # Setting cache expiry time (TTL)
+            redis_client.hexpire("Tf cache", ttl, redis_key)
+            logger.info(f"Set cache for key: {redis_key}, expires in {ttl}s")
+        except redis.RedisError as e:
+            logger.error(f"Redis error on set({redis_key}): {e}")
+        # Can be an issue if second request is submitted before first request is resolved.
+        
     else:
-        result = json.loads(cache_value)
-    # Prepare final output for GitHub comment
-    final_review = result.get("final_review", "")
-    corrected_code = result.get("corrected_code", "")
-    final_output = ""
-    if final_review:
-        final_output += f"## Final Review\n\n{final_review}\n\n"
-    if corrected_code:
-        final_output += f"## Corrected variables.tf\n\n```hcl\n{corrected_code}\n```"
-    if not final_output:
-        final_output = "No meaningful review or corrected code was generated."
-    # Edit the placeholder comment with the final output
-    issue.get_comment(comment_id).edit(final_output)
-    return {"status": "processed", "result": final_output}
+        redis_client.hexpire("Tf cache", ttl, redis_key)
+        logger.info(f"Cache hit for key: {redis_key}, expires in {ttl}s")
+        result = str(cache_value)
+    
+    # Editing the placeholder comment
+    issue.get_comment(comment_id).edit(result)
+    
+    return {"status": "processed", "result": result}
