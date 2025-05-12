@@ -36,7 +36,7 @@ def evaluate_tf_from_github(repo_url: str):
     print(f"\nEvaluating variables.tf file from: {repo_url}")
     print("=" * 60)
     result = run_simple_rag(tf_text=content)
-    print("\n--- Final Review ---")
+    print("\n--- Review ---")  # Updated title from "Final Review"
     print(result["final_review"])
     print("\n--- Corrected variables.tf ---")
     print(result["corrected_code"])
@@ -56,7 +56,7 @@ def evaluate(code: str):
         result = {}
     final_review = result.get("final_review", "No review generated.")
     corrected_code = result.get("corrected_code", "")
-    print("\n--- Final Review ---")
+    print("\n--- Review ---")  # Updated title from "Final Review"
     print(final_review)
     print("\n--- Corrected variables.tf ---")
     print(corrected_code)

@@ -1,6 +1,6 @@
 import os
+import re
 import time
-import psycopg
 import numpy as np
 from dotenv import load_dotenv
 from pymilvus import Collection, utility
@@ -38,6 +38,28 @@ def get_top_k_chunks(query_embedding, k=5):
     )
     return search_results[0]
 
+def extract_renamed_vars(review_text: str) -> list[tuple[str, str]]:
+    pattern = r'`?(\w+)`?\s*->\s*`?(\w+)`?'
+    return re.findall(pattern, review_text)
+
+def extract_validation_blocks(text: str) -> dict:
+    variable_blocks = re.findall(r'(variable\s+"[^"]+"\s*{[^}]*?(validation\s*{[^}]*}[^}]*?)+})', text, re.DOTALL)
+    return {
+        re.search(r'variable\s+"([^"]+)"', block[0]).group(1): block[0]
+        for block in variable_blocks if re.search(r'variable\s+"([^"]+)"', block[0])
+    }
+
+def reinsert_validation_blocks(original: str, fixed: str) -> str:
+    original_blocks = extract_validation_blocks(original)
+    for var_name, original_block in original_blocks.items():
+        fixed = re.sub(
+            rf'(variable\s+"{re.escape(var_name)}"\s*{{)(.*?)(}})',
+            lambda m: original_block,
+            fixed,
+            flags=re.DOTALL
+        )
+    return fixed
+
 def run_simple_rag(tf_text: str) -> dict:
     start_time = time.time()
     review_chunks = chunk_text(tf_text, file_type="tf")
@@ -45,6 +67,7 @@ def run_simple_rag(tf_text: str) -> dict:
     all_chunk_feedback = []
     corrected_chunks = []
     running_summary = []
+    renamed_variables = []
 
     best_practices = load_best_practices()
 
@@ -55,49 +78,61 @@ def run_simple_rag(tf_text: str) -> dict:
             context_docs = get_top_k_chunks(embedding, k=5)
             context = "\n---\n".join([doc[2] for doc in context_docs])
             summary_section = "\n".join(running_summary[-5:]) or "No issues found yet."
-            
+
             review_prompt = REVIEW_PROMPT_TEMPLATE.format(
                 best_practices=best_practices,
                 summary_section=summary_section,
                 chunk=chunk
             )
             review_response = query_granite(review_prompt).strip()
-            if not review_response or review_response.startswith("[Error"):
-                print(f"[ERROR] No review response for chunk {i+1}. Review response: {review_response}")
-            else:
+            if review_response and not review_response.startswith("[Error"):
                 print(f"[INFO] Review response for chunk {i+1}: {review_response}")
+                renamed_variables.extend(extract_renamed_vars(review_response))
+            else:
+                print(f"[ERROR] No valid review response for chunk {i+1}")
             all_chunk_feedback.append((i+1, review_response))
             running_summary.append(review_response)
         except Exception as e:
-            print(f"[ERROR] Failed review for chunk {i+1}: {e}")
+            print(f"[ERROR] Review failed for chunk {i+1}: {e}")
             all_chunk_feedback.append((i+1, "[ERROR] Review failed"))
             continue
 
         try:
-            fix_prompt = FIX_PROMPT_TEMPLATE.format(
-                context=context,
-                chunk=chunk
-            )
+            fix_prompt = FIX_PROMPT_TEMPLATE.format(context=context, chunk=chunk)
             fix_response = query_granite(fix_prompt).strip()
-            corrected_chunks.append(fix_response)
+            fixed_with_validation = reinsert_validation_blocks(chunk, fix_response)
+            corrected_chunks.append(fixed_with_validation)
         except Exception as e:
-            print(f"[ERROR] Failed fix for chunk {i+1}: {e}")
+            print(f"[ERROR] Fix failed for chunk {i+1}: {e}")
             corrected_chunks.append(chunk)
 
-    feedbacks = "\n\n".join([f"Chunk {i+1}:\n{resp}" for i, resp in all_chunk_feedback])
-    print(f"\n[INFO] Feedbacks collected: {feedbacks}")
-    
+    feedbacks = "\n\n".join([f"Chunk {i}:\n{resp}" for i, resp in all_chunk_feedback])
+
     try:
-        final_prompt = FINAL_PROMPT_TEMPLATE.format(chunk_summaries=feedbacks)
+        if renamed_variables:
+            unique_renames = sorted(set(renamed_variables))
+            rename_table = "| Current Name | Suggested Name |\n|--------------|----------------|\n"
+            for old, new in unique_renames:
+                if old == new:
+                    rename_table += f"| `{old}` | _No change_ |\n"
+                else:
+                    rename_table += f"| `{old}` | `{new}` |\n"
+        else:
+            rename_table = "_No renaming suggestions found._"
+
+        final_prompt = FINAL_PROMPT_TEMPLATE.format(
+            chunk_summaries=feedbacks,
+            rename_table=rename_table
+        )
         final_review = query_granite(final_prompt).strip()
-        print(f"[INFO] Final review response: {final_review}")
+        print(f"[INFO] Review response: {final_review}")
     except Exception as e:
         print(f"[ERROR] Final review synthesis failed: {e}")
         final_review = "[ERROR] Could not generate consolidated review."
-    
+
     final_code = "\n\n".join(corrected_chunks)
     print(f"\n[INFO] Granite full review + fix took {time.time() - start_time:.2f} seconds.")
-    
+
     return {
         "final_review": final_review,
         "corrected_code": final_code
@@ -111,7 +146,6 @@ def load_best_practices():
             with open(os.path.join(guide_folder, filename), "r") as file:
                 best_practices += file.read() + "\n---\n"
     return best_practices
-
 
 REVIEW_PROMPT_TEMPLATE = """You are an expert Terraform code reviewer focused on enforcing internal standards for `variables.tf` files used in IBM Cloud infrastructure.
 Use the following best practices:
@@ -140,6 +174,7 @@ Rules to follow:
 - Maintain consistent prefixes for service-specific variables.
 - Ensure all required variables appear before optional ones.
 - Preserve all Terraform `validation` blocks exactly as they appear.
+- Do not change or paraphrase the `description` field of any variable.
 
 Context:
 {context}
@@ -150,25 +185,18 @@ Code to fix:
 Corrected Code:
 """
 
-FINAL_PROMPT_TEMPLATE = """You are a Terraform expert reviewer.
-You have reviewed several chunks of a `variables.tf` file and now need to generate a final, consolidated review.
-Summarize the key issues found across all chunks and suggest consistent improvements.
+FINAL_PROMPT_TEMPLATE = """You are synthesizing a full review of a Terraform `variables.tf` file based on previous chunk-wise feedback and corrections.
 
-Follow these conventions:
-- Use `snake_case` for variable names.
-- Use full names for variables (e.g., `secrets_manager` instead of `sm`).
-- Preserve industry-standard acronyms (e.g., `vpc`, `cos`).
-- Boolean variables should start with verbs like `use_`, `enable_`, or `disable_`.
-- Variables referring to existing resources must start with `existing_`.
-- Use suffixes like `_id`, `_name`, or `_crn`.
-- Maintain consistent prefixes for related variables.
-- Preserve all Terraform `validation` blocks exactly as they appear.
+Using the chunk-level reviews below, generate the following:
 
-Input:
+1. A concise summary of issues and naming improvements (in 2-3 sentences).
+2. A Markdown table mapping current variable names to the suggested names (if renamed):
+{rename_table}
+
+3. The fully corrected and merged `variables.tf` file (with no comments or headers between chunks).
+
+Chunk-wise feedback:
 {chunk_summaries}
 
-Your output must include:
-1. **Final Consolidated Review**: A bullet-point summary of all issues found.
-2. **Renamed Variables**: A mapping of problematic variable names → suggested names.
-3. **Corrected variables.tf**: Show the fully corrected `variables.tf` content.
+Output:
 """
