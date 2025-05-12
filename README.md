@@ -44,8 +44,25 @@ A GitHub-integrated review bot that automatically evaluates `variables.tf` files
 * Python 3.8+
 * Docker & Docker Compose
 * [Ollama](https://ollama.com) installed with `granite3.3`
+* A GitHub bot set up as follows:
+
+  - With permissions to read and write repository contents and comments on pull requests and issues:
+  
+  ![image](https://github.com/user-attachments/assets/92f4472b-08e4-4cc2-9bca-002d49dbec93)
 
 
+  ![image](https://github.com/user-attachments/assets/2149b3ad-792f-433c-9f41-7df6e330c3b0)
+
+  
+  ![image](https://github.com/user-attachments/assets/9357f981-02f7-4fda-99aa-e89a68b992b9)
+
+
+   - Subscribed to events for comments created in issues and pull requests:
+
+  ![image](https://github.com/user-attachments/assets/48f4a917-f287-4941-a770-05d58e68ec92)
+
+
+  - Install the GitHub bot to the required repository.
 
 ## 🔧 Setup Instructions
 
