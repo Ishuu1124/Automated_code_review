@@ -1,40 +1,42 @@
-# 🛠 IBM Cloud Terraform Variable Reviewer
+# 🧠 Terraform RAG Review Bot with Granite 3.3
 
-A GitHub-integrated review bot that automatically evaluates `variables.tf` files against best practices, suggests improvements, and generates corrected Terraform code using RAG (Retrieval-Augmented Generation) powered by the Granite LLM and Milvus.
+A GitHub-integrated **RAG-based reviewer** that automatically analyzes `variables.tf` files for naming and structure violations, suggests fixes, and generates corrected Terraform code using **Granite 3.3** (via **Ollama**) and **Milvus** or **pgVector** for context retrieval.
 
+![Architecture Diagram](https://github.com/user-attachments/assets/1e2b333b-7571-4247-8d61-dad197c6a309)
 
 
 ## 🚀 Features
 
-* Automatically reviews `variables.tf` files in PRs or local code.
-* Checks for naming convention violations and structural issues.
-* Uses best practices and context-aware retrieval.
-* Preserves descriptions and validation blocks during fixes.
-* Outputs clean reviews, renamed variable mapping, and corrected code.
+* ✅ Automated review of `variables.tf` files from PRs or local code.
+* 🤖 Uses Retrieval-Augmented Generation with Granite 3.3 LLM.
+* 📎 Embeds and retrieves Terraform best practices from `.txt` and `.tf` files.
+* 🧠 Fixes issues while preserving validation and description blocks.
+* 📋 Outputs clean review summary, rename suggestions, corrected code, and scoring.
 
 
 
-## 📦 Folder Structure
+## 📁 Folder Structure
 
 ```bash
 .
 ├── db/
-│   └── indexer.py               # Embeds and indexes best practices in Milvus
+│   ├── pgvector_conn.py         # PgVector connection setup (if using PostgreSQL)
+│   └── indexer.py               # Embeds and indexes best practices in Milvus/pgVector
 ├── retriever/
 │   └── simple_rag.py            # RAG pipeline for review and fix
 ├── evaluator/
-│   └── scorer.py                # Basic evaluation scoring utilities
+│   └── scorer.py                # Evaluation scoring utilities
 ├── utils/
 │   └── chunker.py               # Text chunking logic
 ├── models/
 │   └── granite_model.py         # Granite model wrapper (via Ollama)
 ├── guide/
-│   └── bp.txt       # Best practices for Terraform variable files
-├── ghub.py                      # GitHub integration to review remote PRs
-├── ghub_utils.py
-├── .env                         # Environment variables
+│   └── bp.txt                   # Best practices for Terraform variable files
+├── ghub.py                      # GitHub PR integration
+├── ghub_utils.py                # GitHub utility functions
 ├── milvus-standalone/
-│   └── docker-compose.yml       # Milvus standalone setup
+│   └── docker-compose.yml       # Milvus setup (if using Milvus)
+├── .env                         # Environment variables
 ```
 
 
@@ -42,8 +44,12 @@ A GitHub-integrated review bot that automatically evaluates `variables.tf` files
 ## ✅ Prerequisites
 
 * Python 3.8+
-* Docker & Docker Compose
-* [Ollama](https://ollama.com) installed with `granite3.3`
+* [Ollama](https://ollama.com) with `granite3.3` pulled
+* Either:
+
+  * **PostgreSQL** with `pgvector` extension enabled, or
+  * **Milvus** (via Docker) for vector storage
+
 * A GitHub bot set up as follows:
 
   - With permissions to read and write repository contents and comments on pull requests and issues:
@@ -64,6 +70,7 @@ A GitHub-integrated review bot that automatically evaluates `variables.tf` files
 
   - Install the GitHub bot to the required repository.
 
+
 ## 🔧 Setup Instructions
 
 ### 1. Clone the Repository
@@ -79,14 +86,29 @@ cd Automated_code_review
 pip install -r requirements.txt
 ```
 
-### 3. Set Up Environment Variables
+### 3. Configure `.env` File
 
-Create a `.env` file in the root directory:
+For **Milvus**:
 
 ```env
 MILVUS_HOST=localhost
 MILVUS_PORT=19530
 COLLECTION_NAME=docs
+```
+
+For **pgVector**:
+
+```env
+DB_NAME=rag_db
+DB_USER=your_user
+DB_PASSWORD=your_password
+DB_HOST=localhost
+DB_PORT=5432
+```
+
+Common settings:
+
+```env
 GUIDE_FOLDER_PATH=guide
 GITHUB_BOT_SECRET=
 GITHUB_BOT_ID=
@@ -95,56 +117,69 @@ CELERY_BROKER_URL=
 CELERY_RESULT_BACKEND=
 ```
 
-### 4. Start Milvus Locally
+### 4. Start Vector DB
 
-```bash
-docker-compose up -d
-```
+* For **Milvus**:
 
-Wait until Milvus is up (check logs with `docker-compose logs -f`).
+  ```bash
+  docker-compose up -d
+  ```
 
-### 5. Start Ollama with Granite
+  *(Check logs with `docker-compose logs -f`)*
+
+* For **pgVector**, ensure PostgreSQL is running and:
+
+  ```sql
+  CREATE EXTENSION IF NOT EXISTS vector;
+  ```
+
+### 5. Start Ollama
 
 ```bash
 ollama run granite3.3
 ```
 
+
+
 ## 🔍 Usage
 
+To run the reviewer:
 
-### Start script
-
-```
+```bash
 ./start_celery.sh
 ```
 
+This will:
 
-This fetches `variables.tf` from the root of the given repo, runs a review, and prints:
+* Fetch `variables.tf` from a PR or local repo root
+* Run a context-aware review
+* Print:
 
-* ✅ Review Summary
-* 📝 Suggested Renames
-* 🔧 Corrected Code
-* 📊 Score & Token Count
-
-
-
-## 📁 Guide Files
-
-Put all `.txt` documents outlining variable naming conventions, structuring rules, etc., in the `guide/` folder. These serve as context for the review.
+  * ✅ Review Summary
+  * 📝 Suggested Renames
+  * 🔧 Corrected Code
+  * 📊 Score & Token Count
 
 
-## 🧠 Behind the Scenes
+## 📚 Guide Files
 
-* ✅ Embeddings: `all-MiniLM-L6-v2` via `sentence-transformers`
-* 🔍 Vector DB: Milvus standalone (Docker)
-* 🧠 LLM: Granite Code (via Ollama)
-* 📎 RAG: Context retrieved from `guide/*.txt`
-* 🛠 Fixes: LLM rewrites chunks while preserving validation and descriptions
+Add your `.txt` and `.tf` best practice documents to the `guide/` folder. These are indexed for retrieval and used during code evaluation.
 
+
+
+## 🧠 Behind the scenes
+
+* Embedding Model: `all-MiniLM-L6-v2` via `sentence-transformers`
+* Vector DB: Milvus (Docker) or pgVector (PostgreSQL)
+* LLM: Granite 3.3 via Ollama
+* RAG: Chunks retrieved from `guide/*.txt`
+* Fix Logic: Chunk rewriting with preservation of validation and descriptions
 
 
 ## 🛑 Notes
 
-* Only the `variables.tf` file is currently reviewed.
-* Descriptions and validation blocks are never altered.
-* No extra explanations are included in the final fixed code.
+* Only `variables.tf` is currently supported.
+* Descriptions and validation blocks are never modified.
+* Final code output contains **no extra explanations**—just clean, fixed Terraform code.
+
+
