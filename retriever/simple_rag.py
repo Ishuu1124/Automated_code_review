@@ -101,17 +101,17 @@ Apply the following naming and structural standards:
 - Use suffixes like `_id`, `_name`, or `_crn` consistently (e.g., `resource_group_id` not `id_resource_group`).
 - When needed, use service-specific prefixes for context (e.g., `log_analysis_instance_name`).
 - Group and order variables logically for usability and readability.
-- Preserve all Terraform `validation` blocks exactly as they appear in the input. Do not simplify, remove, or alter them, even if the values seem restrictive or verbose.
-- Your task is to suggest improvements to variable names and structure *without modifying logic or validation rules*. Keep all existing constraints such as `validation` blocks, `default` values, and type definitions intact unless explicitly required to change.
+- Preserve all Terraform `validation` blocks exactly as they appear in the input.
 
+Your output must include:
+1. **Review**: A short summary of key issues found.
+2. **Renamed Variables**: A markdown table mapping current variable names to suggested names.
+3. **Corrected variables.tf**: The complete corrected version of the file.
+Do not include extra explanations or justification text. No section should begin with “Explanation” or “Changes made”.
+Only output the required sections.
 
 Input:
 {chunk_summaries}
-
-Your output must include:
-1. **Final Consolidated Review**: A bullet-point summary of all issues found.
-2. **Renamed Variables**: A mapping of problematic variable names → suggested names.
-3. **Corrected variables.tf**: Show the fully corrected `variables.tf` content.
 """
 
 def get_pgvector_connection():

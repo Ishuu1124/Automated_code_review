@@ -15,7 +15,6 @@ model = SentenceTransformer("all-MiniLM-L6-v2")
 
 def init_db(conn):
     with conn.cursor() as cur:
-
         cur.execute("""
             CREATE EXTENSION IF NOT EXISTS vector;
             CREATE TABLE IF NOT EXISTS docs (
@@ -38,11 +37,16 @@ def index_docs(folder=DATA_DIR):
     files = glob.glob(os.path.join(folder, "*.txt")) + glob.glob(os.path.join(folder, "*.tf"))
     total_files = len(files)
     updated_chunks = 0
+
     with conn.cursor() as cur:
         for path in files:
             with open(path, "r", encoding="utf-8") as f:
                 content = f.read()
-            chunks = chunk_text(content)
+
+            ext = os.path.splitext(path)[1].lower()
+            file_type = "tf" if ext == ".tf" else "txt"
+            chunks = chunk_text(content, file_type=file_type)
+
             embeddings = model.encode(chunks, batch_size=32, show_progress_bar=True)
             for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
                 content_hash = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
@@ -61,10 +65,5 @@ def index_docs(folder=DATA_DIR):
         conn.commit()
 
     conn.close()
-    end_time = time.time()
-    print(f"\nTotal files scanned: {total_files}")
-    print(f"Chunks updated/indexed: {updated_chunks}")
-    print(f"Indexing took {end_time - start_time:.2f} seconds.")
-
-if __name__ == "__main__":
-    index_docs()
+    duration = time.time() - start_time
+    print(f"[INFO] Indexed {total_files} files with {updated_chunks} updated chunks in {duration:.2f} seconds.")
