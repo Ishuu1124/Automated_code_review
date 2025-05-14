@@ -34,6 +34,31 @@
 ├── github_utils.py              # Utility functions for GitHub integration
 ├── .env                         # Environment variables
 ```
+
+## Prerequisites
+* Python 3.8+
+* [Ollama](https://ollama.com) with `granite3.3` pulled
+* **PostgreSQL** with `pgvector` extension enabled
+* A GitHub bot set up as follows:
+
+  - With permissions to read and write repository contents and comments on pull requests and issues:
+  
+  ![image](https://github.com/user-attachments/assets/92f4472b-08e4-4cc2-9bca-002d49dbec93)
+
+
+  ![image](https://github.com/user-attachments/assets/2149b3ad-792f-433c-9f41-7df6e330c3b0)
+
+  
+  ![image](https://github.com/user-attachments/assets/9357f981-02f7-4fda-99aa-e89a68b992b9)
+
+
+   - Subscribed to events for comments created in issues and pull requests:
+
+  ![image](https://github.com/user-attachments/assets/48f4a917-f287-4941-a770-05d58e68ec92)
+
+
+  - Install the GitHub bot to the required repository.
+
 ## Setup Instructions
 ### 1. Install Dependencies
 Make sure you have Python 3.8+ installed.
@@ -44,9 +69,9 @@ pip install -r requirements.txt
 Ensure you also have the following installed:
 - **PostgreSQL** with `pgvector` extension enabled
 - **Ollama** running locally with the `granite3.3` model pulled
-To run the model:
+To pull the model:
 ```bash
-ollama run granite3.3
+ollama pull granite3.3
 ```
 
 ### 2. Configure Environment Variables
@@ -69,13 +94,14 @@ Update these values based on your PostgreSQL setup.
 
 Make sure your local PostgreSQL instance is running and has the `pgvector` extension installed:
 
+To install postgres:
+```
+brew install postgresql
+```
+
 To install pgvector:
 ```
 brew install pgvector
-```
-
-```sql
-CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
 ### ✅ To **create** your own database, use:
@@ -84,11 +110,15 @@ CREATE EXTENSION IF NOT EXISTS vector;
 createdb -U <your_user> <db_name>
 ```
 
+
 To connect to the database:
 ```
 psql -U <your_user> -d <db_name>
 ```
 
+```sql
+CREATE EXTENSION IF NOT EXISTS vector;
+```
 ## 🔍 Usage
 
 ### Start script
