@@ -69,13 +69,24 @@ Update these values based on your PostgreSQL setup.
 
 Make sure your local PostgreSQL instance is running and has the `pgvector` extension installed:
 
+To install pgvector:
+```
+brew install pgvector
+```
+
 ```sql
 CREATE EXTENSION IF NOT EXISTS vector;
 ```
 
-For running it locally:
+### ✅ To **create** your own database, use:
+
+```bash
+createdb -U <your_user> <db_name>
 ```
-psql -U <your_user> -d rag_db 
+
+To connect to the database:
+```
+psql -U <your_user> -d <db_name>
 ```
 
 ## 🔍 Usage
@@ -110,6 +121,3 @@ Put all `.txt` documents outlining variable naming conventions, structuring rule
 * Only the `variables.tf` file is currently reviewed.
 * Descriptions and validation blocks are never altered.
 * No extra explanations are included in the final fixed code.
-
-
-

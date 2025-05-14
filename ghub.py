@@ -3,7 +3,7 @@ from urllib.parse import urlparse
 from github import Github
 import os
 from retriever.simple_rag import run_simple_rag
-from evaluator.scorer import score_response, answer_length, keyword_overlap
+from evaluator.scorer import score_response, answer_length
 
 load_dotenv()
 VALID_NETLOCS = [
@@ -36,7 +36,7 @@ def evaluate_tf_from_github(repo_url: str):
     print(f"\nEvaluating variables.tf file from: {repo_url}")
     print("=" * 60)
     result = run_simple_rag(tf_text=content)
-    print("\n--- Final Review ---")
+    print("\n--- Review ---")
     print(result["final_review"])
     print("\n--- Corrected variables.tf ---")
     print(result["corrected_code"])
@@ -56,7 +56,7 @@ def evaluate(code: str):
         result = {}
     final_review = result.get("final_review", "No review generated.")
     corrected_code = result.get("corrected_code", "")
-    print("\n--- Final Review ---")
+    print("\n--- Review ---")
     print(final_review)
     print("\n--- Corrected variables.tf ---")
     print(corrected_code)

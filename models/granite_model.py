@@ -26,7 +26,7 @@ def embed_text(text: str) -> list:
                 "model": MODEL_NAME,
                 "prompt": text
             },
-            timeout=30
+            timeout=60
         )
         response.raise_for_status()
         return response.json().get("embedding", [])
