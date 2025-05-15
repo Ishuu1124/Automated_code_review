@@ -1,11 +1,12 @@
 import re
 
 def chunk_text(file_text: str, max_chars: int = 1500, file_type: str = 'tf') -> list:
+    """Splits the text into chunks."""
     if file_type == 'tf':
-        variable_blocks = re.findall(r'(variable\s+".+?"\s*\{[^}]*\})', file_text, re.DOTALL)
+        # Terraform block-based chunking
+        variable_blocks = re.findall(r'(variable\s+".+?"\s*\{[^}]+\})', file_text, re.DOTALL)
         chunks = []
         current_chunk = ""
-        
         for block in variable_blocks:
             block = block.strip()
             if len(current_chunk) + len(block) > max_chars:
@@ -14,13 +15,11 @@ def chunk_text(file_text: str, max_chars: int = 1500, file_type: str = 'tf') -> 
                 current_chunk = block
             else:
                 current_chunk += "\n\n" + block
-
         if current_chunk:
             chunks.append(current_chunk.strip())
-
         return chunks
-
     else:
+        # Hybrid chunking for .txt files (using paragraphs + sentences fallback strategy)
         paragraphs = file_text.split("\n\n")
         chunks = []
         current_chunk = ""
@@ -40,7 +39,6 @@ def chunk_text(file_text: str, max_chars: int = 1500, file_type: str = 'tf') -> 
                         sentence_chunk = sentence
                     else:
                         sentence_chunk += " " + sentence
-
                 if sentence_chunk:
                     chunks.append(sentence_chunk.strip())
             else:
@@ -53,7 +51,6 @@ def chunk_text(file_text: str, max_chars: int = 1500, file_type: str = 'tf') -> 
 
         if current_chunk:
             chunks.append(current_chunk.strip())
-        
         return chunks
 
 
@@ -115,5 +112,3 @@ def chunk_text(file_text: str, max_chars: int = 1500, file_type: str = 'tf') -> 
 #             chunks.append(current_chunk.strip())
         
 #         return chunks
-
-

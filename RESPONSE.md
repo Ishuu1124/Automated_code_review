@@ -1,4 +1,4 @@
-Evaluating variables.tf file from: https://github.com/terraform-ibm-modules/terraform-ibm-cos
+ variables.tf file from: https://github.com/terraform-ibm-modules/terraform-ibm-cos
 ============================================================
 Granite response generation took 479.22 seconds.
 

@@ -1,17 +1,18 @@
 import os
-import sys
 import time
 import glob
 import hashlib
-from dotenv import load_dotenv
 from sentence_transformers import SentenceTransformer
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), "..")))
+from dotenv import load_dotenv
+from pymilvus import Collection, connections
 from utils.chunker import chunk_text
 from db.dbFactory import dbFactory
+
 
 load_dotenv()
 DATA_DIR = "guide"
 model = SentenceTransformer("all-MiniLM-L6-v2")
+
 
 db = dbFactory.makedb("milvus")
 

@@ -44,7 +44,6 @@ pymilvus==2.5.8
 PyNaCl==1.5.0
 python-dateutil==2.9.0.post0
 python-dotenv==1.1.0
-python-hcl2==7.2.0
 pytz==2025.2
 PyYAML==6.0.2
 redis==5.2.1
@@ -54,7 +53,6 @@ safetensors==0.5.3
 scikit-learn==1.6.1
 scipy==1.15.2
 sentence-transformers==4.0.2
-setuptools==78.1.0
 six==1.17.0
 SQLAlchemy==2.0.29
 sympy==1.13.1
