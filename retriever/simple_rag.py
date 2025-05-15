@@ -175,6 +175,8 @@ Rules to follow:
 - Ensure all required variables appear before optional ones.
 - Preserve all Terraform `validation` blocks exactly as they appear.
 - Do not change or paraphrase the `description` field of any variable.
+- Do not give explanations, only give corrected code.
+- Do not give any text in between corrected code.
 
 Context:
 {context}
@@ -187,16 +189,29 @@ Corrected Code:
 
 FINAL_PROMPT_TEMPLATE = """You are synthesizing a full review of a Terraform `variables.tf` file based on previous chunk-wise feedback and corrections.
 
-Using the chunk-level reviews below, generate the following:
+You must generate the following output:
 
-1. A concise summary of issues and naming improvements (in 2-3 sentences).
-2. A Markdown table mapping current variable names to the suggested names (if renamed):
-{rename_table}
+1. **Summary (2-3 sentences)**:
+Briefly summarize the key naming and structure issues found across the file. Keep it concise and non-repetitive.
 
-3. The fully corrected and merged `variables.tf` file (with no comments or headers between chunks).
+2. **Renamed Variables Table**:
+Output a Markdown table mapping original variable names to their suggested renamed versions.
+- Only include rows where the variable name has changed.
+- Use this format:
 
-Chunk-wise feedback:
+| Current Variable Name              | Suggested Variable Name                                      |
+|-----------------------------------|--------------------------------------------------------------|
+| existingvpc                       | existing_vpc                                                 |
+| sm_token                          | secrets_manager_token                                        |
+
+
+---
+
+Here is the input (chunk-level reviews and feedback):
+
 {chunk_summaries}
-
 Output:
 """
+
+
+
