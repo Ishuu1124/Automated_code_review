@@ -1,3 +1,4 @@
+#to locally test the code
 import os
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -24,7 +25,7 @@ def evaluate_multiple_tf_files(tf_folder):
     print("\n--- Metrics ---")
     print(f"Score: {score_response(combined_content, review):.2f}")
     print(f"Length: {answer_length(review)} tokens")
-    #print(f"Keyword Overlap: {keyword_overlap(combined_content, corrected):.2f}")
+    
 if __name__ == "__main__":
     # evaluate_multiple_tf_files("sample_tf")
     evaluate_tf_from_github('https://github.com/terraform-ibm-modules/terraform-ibm-cos')

@@ -6,59 +6,13 @@ from dotenv import load_dotenv
 from pymilvus import Collection, utility
 from models.granite_model import query_granite, embed_text
 from utils.chunker import chunk_text
+from db.indexer import db
 
 load_dotenv()
 
 MILVUS_HOST = os.getenv("MILVUS_HOST")
 MILVUS_PORT = os.getenv("MILVUS_PORT")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
-
-def get_milvus_connection():
-    try:
-        if utility.has_collection(COLLECTION_NAME):
-            print(f"Found collection {COLLECTION_NAME}")
-        collection = Collection(COLLECTION_NAME)
-    except Exception as e:
-        print(f"[ERROR] Failed to load collection from Milvus: {e}")
-    if not utility.has_collection(COLLECTION_NAME):
-        print(f"[ERROR] Collection {COLLECTION_NAME} not found in Milvus!")
-    return collection
-
-def get_top_k_chunks(query_embedding, k=5):
-    collection = get_milvus_connection()
-    collection.load()
-    search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
-    search_results = collection.search(
-        data=[query_embedding.tolist()],
-        anns_field="embedding",
-        param=search_params,
-        limit=k,
-        expr=None,
-        output_fields=["path", "chunk_index", "content"]
-    )
-    return search_results[0]
-
-def extract_renamed_vars(review_text: str) -> list[tuple[str, str]]:
-    pattern = r'`?(\w+)`?\s*->\s*`?(\w+)`?'
-    return re.findall(pattern, review_text)
-
-def extract_validation_blocks(text: str) -> dict:
-    variable_blocks = re.findall(r'(variable\s+"[^"]+"\s*{[^}]*?(validation\s*{[^}]*}[^}]*?)+})', text, re.DOTALL)
-    return {
-        re.search(r'variable\s+"([^"]+)"', block[0]).group(1): block[0]
-        for block in variable_blocks if re.search(r'variable\s+"([^"]+)"', block[0])
-    }
-
-def reinsert_validation_blocks(original: str, fixed: str) -> str:
-    original_blocks = extract_validation_blocks(original)
-    for var_name, original_block in original_blocks.items():
-        fixed = re.sub(
-            rf'(variable\s+"{re.escape(var_name)}"\s*{{)(.*?)(}})',
-            lambda m: original_block,
-            fixed,
-            flags=re.DOTALL
-        )
-    return fixed
 
 def run_simple_rag(tf_text: str) -> dict:
     start_time = time.time()
@@ -75,7 +29,7 @@ def run_simple_rag(tf_text: str) -> dict:
         print(f"\n[INFO] Processing chunk {i + 1}/{len(review_chunks)}")
         try:
             embedding = np.array(embed_text(chunk))
-            context_docs = get_top_k_chunks(embedding, k=5)
+            context_docs = db.get_top_k_chunks(embedding, 5)
             context = "\n---\n".join([doc[2] for doc in context_docs])
             summary_section = "\n".join(running_summary[-5:]) or "No issues found yet."
 
