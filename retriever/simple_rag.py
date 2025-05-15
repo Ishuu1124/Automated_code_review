@@ -14,6 +14,28 @@ MILVUS_HOST = os.getenv("MILVUS_HOST")
 MILVUS_PORT = os.getenv("MILVUS_PORT")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 
+def extract_renamed_vars(review_text: str) -> list[tuple[str, str]]:
+    pattern = r'`?(\w+)`?\s*->\s*`?(\w+)`?'
+    return re.findall(pattern, review_text)
+
+def extract_validation_blocks(text: str) -> dict:
+    variable_blocks = re.findall(r'(variable\s+"[^"]+"\s*{[^}]*?(validation\s*{[^}]*}[^}]*?)+})', text, re.DOTALL)
+    return {
+        re.search(r'variable\s+"([^"]+)"', block[0]).group(1): block[0]
+        for block in variable_blocks if re.search(r'variable\s+"([^"]+)"', block[0])
+    }
+
+def reinsert_validation_blocks(original: str, fixed: str) -> str:
+    original_blocks = extract_validation_blocks(original)
+    for var_name, original_block in original_blocks.items():
+        fixed = re.sub(
+            rf'(variable\s+"{re.escape(var_name)}"\s*{{)(.*?)(}})',
+            lambda m: original_block,
+            fixed,
+            flags=re.DOTALL
+        )
+    return fixed
+
 def run_simple_rag(tf_text: str) -> dict:
     start_time = time.time()
     review_chunks = chunk_text(tf_text, file_type="tf")
