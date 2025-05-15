@@ -1,118 +1,41 @@
 import os
+import re
 import time
-import psycopg
 import numpy as np
+import psycopg
 from dotenv import load_dotenv
+from pymilvus import Collection, utility
 from models.granite_model import query_granite, embed_text
 from utils.chunker import chunk_text
 
+
 load_dotenv()
 
-FEW_SHOT_EXAMPLE = """
-Example Issue:
-Variable: `api_key`
-Problem: Sensitive information not marked as `sensitive`.
-Fix: Add `sensitive = true` to prevent exposure in logs.
-Variable: `use_cos_for_backup`
-Problem: Missing validation for boolean value.
-Fix: Add a validation block ensuring it is either true or false.
-Variable: `sm_token`
-Problem: Acronym used; unclear to users unfamiliar with internal services.
-Fix: Rename to `secrets_manager_token`.
-Variable: `existingvpc`
-Problem: Uses camelCase and lacks clarity about existing resources.
-Fix: Rename to `existing_vpc` using snake_case and prefixing with `existing_`.
-Variable: `disableFeature`
-Problem: Boolean variable not starting with a verb.
-Fix: Rename to `disable_feature_flag`.
-Variable: `name_resource_group`
-Problem: Incorrect order of terms.
-Fix: Rename to `resource_group_name`.
-"""
+MILVUS_HOST = os.getenv("MILVUS_HOST")
+MILVUS_PORT = os.getenv("MILVUS_PORT")
+COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 
-REVIEW_PROMPT_TEMPLATE = """You are an expert Terraform code reviewer focused on enforcing internal standards for `variables.tf` files used in IBM Cloud infrastructure.
-Follow these conventions:
-- Use full names for clarity. Avoid abbreviations like `sm`, `kms`, `en`. Instead use `secrets_manager`, `key_management_service`, `event_notification`, etc.
-- However, you are allowed to use **industry-standard acronyms** like `vpc` (Virtual Private Cloud) and `cos` (Cloud Object Storage). Do NOT rename those.
-- Use `snake_case` (underscores) instead of `camelCase`.
-- Boolean variable names must begin with verbs like `use_`, `enable_`, or `disable_`. Avoid prefixes like `is_`.
-- If a variable refers to an **existing resource**, prefix it with `existing_`.
-- Suffix resource identifiers with `_id` or `_name`, not the other way around. E.g., `resource_group_id`, not `id_resource_group`.
-- Prefix variables with service context if needed (e.g., `log_analysis_instance_name`).
-- Group related variables with consistent prefixes.
-- Group and name related variables consistently.
-- Required variables (those without defaults) must be ordered at the top of the file, followed by optional ones.
-- Preserve all Terraform `validation` blocks exactly as they appear in the input. Do not simplify, remove, or alter them, even if the values seem restrictive or verbose.
-- Your task is to suggest improvements to variable names and structure *without modifying logic or validation rules*. Keep all existing constraints such as `validation` blocks, `default` values, and type definitions intact unless explicitly required to change.
+def extract_renamed_vars(review_text: str) -> list[tuple[str, str]]:
+    pattern = r'`?(\w+)`?\s*->\s*`?(\w+)`?'
+    return re.findall(pattern, review_text)
 
-Example Issues:
-{few_shot_example}
+def extract_validation_blocks(text: str) -> dict:
+    variable_blocks = re.findall(r'(variable\s+"[^"]+"\s*{[^}]*?(validation\s*{[^}]*}[^}]*?)+})', text, re.DOTALL)
+    return {
+        re.search(r'variable\s+"([^"]+)"', block[0]).group(1): block[0]
+        for block in variable_blocks if re.search(r'variable\s+"([^"]+)"', block[0])
+    }
 
-So far, the review has identified these issues:
-{summary_section}
-
-Analyze the following chunk of Terraform code and provide:
-- Variable names with issues
-- Problem descriptions
-- Suggested fixes (brief)
-Respond in structured bullet points only.
-
-Code to review:
-{chunk}
-"""
-
-FIX_PROMPT_TEMPLATE = """You are a Terraform expert. Fix issues in this `variables.tf` chunk based on internal naming conventions.
-Rules to follow:
-- Rename variables to use `snake_case`.
-- Use full words instead of abbreviations like `sm`, `kms`, `en`. Examples:
-    - `apiKeySm` → `secrets_manager_api_key`
-    - `kmsInstanceName` → `key_management_service_instance_name`
-- Do NOT rename standard acronyms like `vpc` or `cos`.
-- Boolean variables must begin with verbs (`use_`, `enable_`, `disable_`). Avoid `is_` and `has_`.
-- Use suffixes like `_id`, `_name`, `_crn` at the end of variable names for clarity.
-- Prefix with `existing_` if variable refers to an existing resource.
-- Maintain contextual prefixes like `log_analysis_*`.
-- Ensure all required variables (i.e., those without a `default`) appear before optional ones in the output.
-- Maintain consistent and readable groupings for related variables.
-- Preserve all Terraform `validation` blocks exactly as they appear in the input. Do not simplify, remove, or alter them, even if the values seem restrictive or verbose.
-- Your task is to suggest improvements to variable names and structure *without modifying logic or validation rules*. Keep all existing constraints such as `validation` blocks, `default` values, and type definitions intact unless explicitly required to change.
-
-
-Context:
-{context}
-
-Code to fix:
-{chunk}
-
-Corrected Code:"""
-
-FINAL_PROMPT_TEMPLATE = """You are a Terraform expert reviewer.
-You have reviewed several chunks of a `variables.tf` file and now need to generate a final, consolidated review.
-Your goal is to:
-- Summarize the key issues found across all chunks.
-- Identify violations of naming conventions.
-- Suggest consistent improvements.
-Apply the following naming and structural standards:
-- Use `snake_case`, not `camelCase`.
-- Use full names in variable names instead of abbreviations (e.g., use `secrets_manager` not `sm`, `key_management_service` not `kms`, `event_notification` not `en`).
-- However, preserve **industry-standard acronyms**, such as `vpc` (Virtual Private Cloud) and `cos` (Cloud Object Storage). Do NOT rename these.
-- For booleans, use verb prefixes like `use_`, `enable_`, or `disable_`.
-- Variables that reference existing resources must start with `existing_`.
-- Use suffixes like `_id`, `_name`, or `_crn` consistently (e.g., `resource_group_id` not `id_resource_group`).
-- When needed, use service-specific prefixes for context (e.g., `log_analysis_instance_name`).
-- Group and order variables logically for usability and readability.
-- Preserve all Terraform `validation` blocks exactly as they appear in the input.
-
-Your output must include:
-1. **Review**: A short summary of key issues found.
-2. **Renamed Variables**: A markdown table mapping current variable names to suggested names.
-3. **Corrected variables.tf**: The complete corrected version of the file.
-Do not include extra explanations or justification text. No section should begin with “Explanation” or “Changes made”.
-Only output the required sections.
-
-Input:
-{chunk_summaries}
-"""
+def reinsert_validation_blocks(original: str, fixed: str) -> str:
+    original_blocks = extract_validation_blocks(original)
+    for var_name, original_block in original_blocks.items():
+        fixed = re.sub(
+            rf'(variable\s+"{re.escape(var_name)}"\s*{{)(.*?)(}})',
+            lambda m: original_block,
+            fixed,
+            flags=re.DOTALL
+        )
+    return fixed
 
 def get_pgvector_connection():
     return psycopg.connect(
@@ -140,56 +63,157 @@ def get_top_k_chunks(query_embedding, k=20, filter_by_filename="variables.tf"):
 
 def run_simple_rag(tf_text: str) -> dict:
     start_time = time.time()
-    review_chunks = chunk_text(tf_text)
+    review_chunks = chunk_text(tf_text, file_type="tf")
     print(f"[INFO] Total review chunks: {len(review_chunks)}")
     all_chunk_feedback = []
     corrected_chunks = []
     running_summary = []
+    renamed_variables = []
+    best_practices = load_best_practices()
+
     for i, chunk in enumerate(review_chunks):
         print(f"\n[INFO] Processing chunk {i + 1}/{len(review_chunks)}")
         try:
             embedding = np.array(embed_text(chunk))
-            context_docs = get_top_k_chunks(embedding, k=5)
+            context_docs = get_top_k_chunks(embedding, 5)
             context = "\n---\n".join([doc[2] for doc in context_docs])
             summary_section = "\n".join(running_summary[-5:]) or "No issues found yet."
+
             review_prompt = REVIEW_PROMPT_TEMPLATE.format(
-                few_shot_example=FEW_SHOT_EXAMPLE,
+                best_practices=best_practices,
                 summary_section=summary_section,
                 chunk=chunk
             )
             review_response = query_granite(review_prompt).strip()
-            if not review_response or review_response.startswith("[Error"):
-                print(f"[ERROR] No review response for chunk {i}. Review response: {review_response}")
+            if review_response and not review_response.startswith("[Error"):
+                print(f"[INFO] Review response for chunk {i+1}: {review_response}")
+                renamed_variables.extend(extract_renamed_vars(review_response))
             else:
-                print(f"[INFO] Review response for chunk {i}: {review_response}")
-            all_chunk_feedback.append((i, review_response))
+                print(f"[ERROR] No valid review response for chunk {i+1}")
+            all_chunk_feedback.append((i+1, review_response))
             running_summary.append(review_response)
         except Exception as e:
-            print(f"[ERROR] Failed review for chunk {i}: {e}")
-            all_chunk_feedback.append((i, "[ERROR] Review failed"))
+            print(f"[ERROR] Review failed for chunk {i+1}: {e}")
+            all_chunk_feedback.append((i+1, "[ERROR] Review failed"))
             continue
+
         try:
-            fix_prompt = FIX_PROMPT_TEMPLATE.format(
-                context=context,
-                chunk=chunk
-            )
+            fix_prompt = FIX_PROMPT_TEMPLATE.format(context=context, chunk=chunk)
             fix_response = query_granite(fix_prompt).strip()
-            corrected_chunks.append(fix_response)
+            fixed_with_validation = reinsert_validation_blocks(chunk, fix_response)
+            corrected_chunks.append(fixed_with_validation)
         except Exception as e:
-            print(f"[ERROR] Failed fix for chunk {i}: {e}")
+            print(f"[ERROR] Fix failed for chunk {i+1}: {e}")
             corrected_chunks.append(chunk)
+
     feedbacks = "\n\n".join([f"Chunk {i}:\n{resp}" for i, resp in all_chunk_feedback])
-    print(f"\n[INFO] Feedbacks collected: {feedbacks}")
+
     try:
-        final_prompt = FINAL_PROMPT_TEMPLATE.format(chunk_summaries=feedbacks)
+        if renamed_variables:
+            unique_renames = sorted(set(renamed_variables))
+            rename_table_rows = "\n".join(
+                f"| `{old}` | `{new}` |" for old, new in unique_renames if old != new
+            )
+        else:
+            rename_table_rows = "_No renaming suggestions found._"
+
+        final_prompt = FINAL_PROMPT_TEMPLATE.format(
+            chunk_summaries=feedbacks,
+            rename_table=rename_table_rows
+        )
         final_review = query_granite(final_prompt).strip()
-        print(f"[INFO] Final review response: {final_review}")
+        print(f"[INFO] Review response: {final_review}")
     except Exception as e:
         print(f"[ERROR] Final review synthesis failed: {e}")
         final_review = "[ERROR] Could not generate consolidated review."
+
     final_code = "\n\n".join(corrected_chunks)
     print(f"\n[INFO] Granite full review + fix took {time.time() - start_time:.2f} seconds.")
+
     return {
         "final_review": final_review,
         "corrected_code": final_code
     }
+
+
+def load_best_practices():
+    best_practices = ""
+    guide_folder = os.getenv("GUIDE_FOLDER_PATH")
+    for filename in os.listdir(guide_folder):
+        if filename.endswith(".txt"):
+            with open(os.path.join(guide_folder, filename), "r") as file:
+                best_practices += file.read() + "\n---\n"
+    return best_practices
+
+REVIEW_PROMPT_TEMPLATE = """You are an expert Terraform code reviewer focused on enforcing IBM Cloud standards for `variables.tf`.
+Apply the following internal best practices:
+{best_practices}
+
+So far, the review has identified these issues:
+{summary_section}
+
+Analyze this Terraform code chunk and provide structured feedback also strictly follow these rules while renaming the variables:
+- Use `snake_case` for all variable names.
+- Expand non-standard abbreviations (e.g., sm → secrets_manager).
+- Preserve standard acronyms (`vpc`, `cos`, `kms`, `crn`).
+- Boolean variables must begin with `enable_`, `disable_`, or `use_`.
+- Suffix variable names with `_id`, `_name`, `_crn`, etc. where applicable.
+- Prefix with `existing_` if referencing an existing resource.
+- Group all `existing_*` variables before new ones.
+- Do NOT touch `validation` blocks.
+- Do NOT reword or paraphrase `description` fields.
+- Do NOT explain anything — output only the corrected code, no extra text.
+Respond only in bullet points.
+
+Terraform code chunk:
+{chunk}
+"""
+
+FIX_PROMPT_TEMPLATE = """You are a Terraform expert improving a `variables.tf` chunk to meet IBM Cloud naming standards.
+
+Strictly follow these rules:
+- Use `snake_case` for all variable names.
+- Expand non-standard abbreviations (e.g., sm → secrets_manager).
+- Preserve standard acronyms (`vpc`, `cos`, `kms`, `crn`).
+- Boolean variables must begin with `enable_`, `disable_`, or `use_`.
+- Suffix variable names with `_id`, `_name`, `_crn`, etc. where applicable.
+- Prefix with `existing_` if referencing an existing resource.
+- Group all `existing_*` variables before new ones.
+- Do NOT touch `validation` blocks.
+- Do NOT reword or paraphrase `description` fields.
+- Do NOT explain anything — output only the corrected code, no extra text.
+
+Context:
+{context}
+
+Terraform code chunk:
+{chunk}
+
+Corrected Code:
+"""
+
+
+FINAL_PROMPT_TEMPLATE = """You are synthesizing a complete review of a Terraform `variables.tf` file based on chunk-level feedback and corrections.
+
+Generate the following:
+
+1. **Summary (2–3 sentences)**:
+Summarize the main issues identified across all chunks (naming, structure, clarity). Avoid repetition.
+
+2. **Renamed Variables Table**:
+Provide a Markdown table of variables that were renamed, based on chunk-level suggestions.
+
+Only include variables that were actually renamed.
+
+| Current Variable Name | Suggested Variable Name |
+|-----------------------|--------------------------|
+{rename_table}
+
+---
+
+Below is the full review data from chunk analysis:
+
+{chunk_summaries}
+
+Final Output:
+"""
