@@ -5,6 +5,7 @@ import numpy as np
 from dotenv import load_dotenv
 from models.granite_model import query_granite, embed_text
 from utils.chunker import chunk_text
+from db.indexer import db
 
 load_dotenv()
 
@@ -114,30 +115,6 @@ Input:
 {chunk_summaries}
 """
 
-def get_pgvector_connection():
-    return psycopg.connect(
-        dbname=os.getenv("DB_NAME"),
-        user=os.getenv("DB_USER"),
-        password=os.getenv("DB_PASSWORD"),
-        host=os.getenv("DB_HOST"),
-        port=os.getenv("DB_PORT")
-    )
-
-def get_top_k_chunks(query_embedding, k=20, filter_by_filename="variables.tf"):
-    conn = get_pgvector_connection()
-    with conn.cursor() as cur:
-        sql = """
-            SELECT path, chunk_index, content, content_hash, embedding
-            FROM docs
-        """
-        if filter_by_filename:
-            sql += f" WHERE path LIKE '%%{filter_by_filename}'"
-        sql += " ORDER BY embedding <-> %s::vector LIMIT %s"
-        cur.execute(sql, (query_embedding.tolist(), k))
-        context_chunks = cur.fetchall()
-    conn.close()
-    return context_chunks
-
 def run_simple_rag(tf_text: str) -> dict:
     start_time = time.time()
     review_chunks = chunk_text(tf_text)
@@ -149,7 +126,7 @@ def run_simple_rag(tf_text: str) -> dict:
         print(f"\n[INFO] Processing chunk {i + 1}/{len(review_chunks)}")
         try:
             embedding = np.array(embed_text(chunk))
-            context_docs = get_top_k_chunks(embedding, k=5)
+            context_docs = db.get_top_k_chunks(embedding, 5)
             context = "\n---\n".join([doc[2] for doc in context_docs])
             summary_section = "\n".join(running_summary[-5:]) or "No issues found yet."
             review_prompt = REVIEW_PROMPT_TEMPLATE.format(

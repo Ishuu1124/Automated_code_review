@@ -17,7 +17,6 @@ db = dbFactory.makedb("milvus")
 
 def index_docs(folder=DATA_DIR):
     start_time = time.time()
-    db.initialise()
 
     files = glob.glob(os.path.join(folder, "*.txt")) + glob.glob(os.path.join(folder, "*.tf"))
     total_files = len(files)
@@ -36,6 +35,8 @@ def index_docs(folder=DATA_DIR):
             content_hash = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
             db.add_index(path, i, chunk, content_hash, embedding)
             updated_chunks+=1
+    
+    db.close_conn()
 
     duration = time.time() - start_time
     print(f"[INFO] Indexed {total_files} files with {updated_chunks} updated chunks in {duration:.2f} seconds.")
