@@ -46,7 +46,7 @@ A GitHub-integrated **RAG-based reviewer** that automatically analyzes `variable
 * Python 3.8+
 * [Ollama](https://ollama.com) with `granite3.3` pulled
 * A running instance of [webhook receiver](https://github.com/aamadeuss/webhook-receiver/tree/tf-review?tab=readme-ov-file#webhook-receiver)
- * Note the Redis URL used for the webhook receiver; it has to be reused here.
+  * Keep note of the Redis URL used for the webhook receiver; it has to be reused here.
 * Either:
 
   * **PostgreSQL** with `pgvector` extension enabled, or
