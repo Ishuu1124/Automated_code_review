@@ -1,2 +1,5 @@
 __pycache__/
 .env
+.venv
+milvus-standalone/milvus-docker/volumes
+.DS_Store
