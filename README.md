@@ -45,6 +45,8 @@ A GitHub-integrated **RAG-based reviewer** that automatically analyzes `variable
 
 * Python 3.8+
 * [Ollama](https://ollama.com) with `granite3.3` pulled
+* A running instance of [webhook receiver](https://github.com/aamadeuss/webhook-receiver/tree/tf-review?tab=readme-ov-file#webhook-receiver)
+ * Note the Redis URL used for the webhook receiver; it has to be reused here.
 * Either:
 
   * **PostgreSQL** with `pgvector` extension enabled, or
@@ -106,7 +108,7 @@ DB_HOST=localhost
 DB_PORT=5432
 ```
 
-Common settings:
+Common settings for both db options:
 
 ```env
 GUIDE_FOLDER_PATH=guide
@@ -116,27 +118,38 @@ REDIS_URL=
 CELERY_BROKER_URL=
 CELERY_RESULT_BACKEND=
 ```
+*`REDIS_URL`, `CELERY_BROKER_URL` and `CELERY_RESULT_BACKEND` have to be the same Redis URL as the webhook receiver.*
 
 ### 4. Start Vector DB
 
 * For **Milvus**:
 
   ```bash
-  docker-compose up -d
+  cd milvus-standalone/milvus-docker
+  podman-compose up -d
   ```
 
   *(Check logs with `docker-compose logs -f`)*
 
-* For **pgVector**, ensure PostgreSQL is running and:
+* For **pgVector**:
+
+  In a separate terminal, run:
+
+  ```bash
+  psql -U <your-username> -d <db_name>
+  ```
+  The username and db_name should be the same given in `.env`.
+
+  In the db terminal, run:
 
   ```sql
   CREATE EXTENSION IF NOT EXISTS vector;
   ```
 
-### 5. Start Ollama
+### 5. Pull model from Ollama
 
 ```bash
-ollama run granite3.3
+ollama pull granite3.3
 ```
 
 
@@ -148,6 +161,8 @@ To run the reviewer:
 ```bash
 ./start_celery.sh
 ```
+
+The process can be initiated using the command `/tf_review` in a PR with the GitHub bot installed in the repo.
 
 This will:
 
