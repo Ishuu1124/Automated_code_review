@@ -1,4 +1,4 @@
- Use full names rather than acronyms to make it easier for users not familiar with the products or services to understand what they refer to. For example: secrets_manager instead of sm, event_notification instead of en. However, industry-wide naming conventions, such as vpc for Virtual Private Cloud or cos for Object Storage, are acceptable and can be used to maintain consistency with established standards.
+Use full names rather than acronyms to make it easier for users not familiar with the products or services to understand what they refer to. For example: secrets_manager instead of sm, event_notification instead of en. However, industry-wide naming conventions, such as vpc for Virtual Private Cloud or cos for Object Storage, are acceptable and can be used to maintain consistency with established standards.
 
 Use underscores for separation. Instead of camelCase, use snake_case for better alignment with Terraform conventions.
 
