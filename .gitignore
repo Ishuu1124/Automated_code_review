@@ -3,3 +3,4 @@ __pycache__/
 .venv
 milvus-standalone/milvus-docker/volumes
 .DS_Store
+test.py
