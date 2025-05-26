@@ -4,9 +4,9 @@ import time
 import numpy as np
 from dotenv import load_dotenv
 from pymilvus import Collection, utility
-from models.granite_model import query_granite, embed_text
-from utils.chunker import chunk_text
-from db.indexer import db
+from app.models.granite_model import query_granite, embed_text
+from app.utils.chunker import chunk_text
+from app.db.indexer import db
 
 load_dotenv()
 

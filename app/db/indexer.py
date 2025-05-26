@@ -5,16 +5,16 @@ import hashlib
 from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 from pymilvus import Collection, connections
-from utils.chunker import chunk_text
-from db.dbFactory import dbFactory
+from app.utils.chunker import chunk_text
+from app.db.dbFactory import dbFactory
 
 
 load_dotenv()
-DATA_DIR = "guide"
+DATA_DIR = "src/guide"
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
-db = dbFactory.makedb("milvus")
+db = dbFactory.makedb("postgres")
 
 def index_docs(folder=DATA_DIR):
     start_time = time.time()

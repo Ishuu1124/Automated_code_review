@@ -1,4 +1,3 @@
-import yaml
 from celery import Celery
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -16,12 +15,12 @@ def load_settings()-> CeleryRedisSettings:
 
 settings = load_settings()
 
-app = Celery(
+celery_app = Celery(
     "tasks",
     broker=settings.CELERY_BROKER_URL,
     backend=settings.CELERY_RESULT_BACKEND,
 )
 
-app.autodiscover_tasks(['celery_app'])
-app.conf.broker_connection_retry_on_startup = True
-app.conf.task_routes={"tasks.process_tf": {"queue": "webhooks"}}
+celery_app.autodiscover_tasks(['app.celery_app'])
+celery_app.conf.broker_connection_retry_on_startup = True
+celery_app.conf.task_routes={"tasks.process_tf": {"queue": "webhooks"}}

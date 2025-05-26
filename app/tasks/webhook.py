@@ -1,18 +1,21 @@
+from app.workers.worker import celery_app
 import json
 import redis
-from celery_app.worker import app, settings
-from github_utils import get_variables_code, connect_repo
-from db.indexer import index_docs
-from ghub import evaluate
+from app.celery_app.worker import celery_app, settings
+from app.github_utils import get_variables_code, connect_repo
+from app.db.indexer import index_docs
+from app.ghub import evaluate
+
 redis_client = redis.Redis.from_url(settings.REDIS_URL, decode_responses=True)
-@app.task(
+
+@celery_app.task(
     name="tasks.process_tf"
 )
-def process_webhook(payload_json, command):
-    data = json.loads(payload_json)
-    owner = data['repository']['owner']['login']
-    repo_name = data['repository']['name']
-    pr_num = data["issue"]["number"]
+def process_webhook(owner: str, repo_name: str, pr_num: int, command: str):
+    # data = json.loads(payload_json)
+    # owner = data['repository']['owner']['login']
+    # repo_name = data['repository']['name']
+    # pr_num = data["issue"]["number"]
     repository = connect_repo(owner=owner, repo_name=repo_name)
     pull = repository.get_pull(pr_num)
     commit_id = pull.head.sha
@@ -20,7 +23,8 @@ def process_webhook(payload_json, command):
     redis_key = commit_id + command[1:]
     # Create a placeholder comment
     comment_id = issue.create_comment("Request received, processing...").id
-    code = get_variables_code(repository, pull)
+    code_to_review = get_variables_code(repository, pull)
+    code = code_to_review[0]
     if code is None:
         issue.get_comment(comment_id).edit("No content found in variables.tf")
         return {
@@ -30,7 +34,7 @@ def process_webhook(payload_json, command):
     # Check Redis cache
     cache_value = redis_client.hget("Tf cache", redis_key)
     if cache_value is None:
-        index_docs("guide")
+        index_docs("app/guide")
         result = evaluate(code)
         # Populate cache
         redis_client.hset("Tf cache", redis_key, json.dumps(result))

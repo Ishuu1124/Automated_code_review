@@ -5,7 +5,7 @@ sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from retriever.simple_rag import run_simple_rag
 from evaluator.scorer import score_response, answer_length, keyword_overlap
 import glob
-from ghub import evaluate_tf_from_github
+from app.ghub import evaluate_tf_from_github
 def evaluate_multiple_tf_files(tf_folder):
     tf_paths = glob.glob(f"{tf_folder}/*.tf")
     combined_content = ""

@@ -5,6 +5,11 @@ from github.PullRequest import PullRequest
 from github import Auth, Github, GithubIntegration
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+files_to_check = [
+    'variables.tf',
+    'outputs.tf'
+]
+
 class GithubSettings(BaseSettings):
     GITHUB_BOT_ID: str
     GITHUB_BOT_SECRET: str
@@ -32,14 +37,15 @@ def get_variables_code(
     
     changed_files = pull.get_files()
     head_sha = pull.head.sha
+    code_to_review = []
     
     for changed_file in changed_files:
         print(changed_file.filename)
-        if changed_file.filename == "variables.tf":
+        if changed_file.filename in files_to_check:
             try:
                 code = repository.get_contents(changed_file.filename, ref=head_sha)
                 code = code.decoded_content.decode("utf-8")
-                return code
+                code_to_review.append(code)
             except Exception as e:
                 return None
-    return None
+    return code_to_review

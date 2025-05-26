@@ -2,8 +2,8 @@ from dotenv import load_dotenv
 from urllib.parse import urlparse
 from github import Github
 import os
-from retriever.simple_rag import run_simple_rag
-from evaluator.scorer import score_response, answer_length
+from app.retriever.simple_rag import run_simple_rag
+from app.evaluator.scorer import score_response, answer_length
 
 load_dotenv()
 VALID_NETLOCS = [
