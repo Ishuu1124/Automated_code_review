@@ -45,7 +45,7 @@ def process_webhook(payload_json, command):
     if final_review:
         final_output += f"## Review\n\n{final_review}\n\n"
     if corrected_code:
-        final_output += f"## Corrected variables.tf\n\n```hcl\n{corrected_code}\n```"
+        final_output += f"## Corrected variables.tf\n\n{corrected_code}\n```"
     if not final_output:
         final_output = "No meaningful review or corrected code was generated."
     # Edit the placeholder comment with the final output

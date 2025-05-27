@@ -4,3 +4,4 @@ __pycache__/
 milvus-standalone/milvus-docker/volumes
 .DS_Store
 test.py
+delete_collection.py

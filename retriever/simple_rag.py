@@ -61,6 +61,9 @@ def reinsert_validation_blocks(original: str, fixed: str) -> str:
     return fixed
 
 def global_reorder_fixed_code(fixed_code: str) -> str:
+    """
+    Call Granite LLM to reorder and group related variables globally after chunk fixes.
+    """
     prompt = GLOBAL_REORDER_PROMPT.format(fixed_code=fixed_code)
     try:
         reordered_code = query_granite(prompt).strip()
@@ -74,11 +77,11 @@ def global_reorder_fixed_code(fixed_code: str) -> str:
         print(f"[ERROR] Global reorder failed: {e}")
         return fixed_code
 
+
 def run_simple_rag(tf_text: str) -> dict:
     start_time = time.time()
     review_chunks = chunk_text(tf_text, file_type="tf")
     print(f"[INFO] Total review chunks: {len(review_chunks)}")
-
     all_chunk_feedback = []
     corrected_chunks = []
     running_summary = []
@@ -141,7 +144,10 @@ def run_simple_rag(tf_text: str) -> dict:
         print(f"[ERROR] Final review synthesis failed: {e}")
         final_review = "[ERROR] Could not generate consolidated review."
 
+    # Merge all fixed chunks into one string
     merged_fixed_code = "\n\n".join(corrected_chunks)
+
+    # NEW: Run global reorder step on the merged fixed code
     final_code = global_reorder_fixed_code(merged_fixed_code)
 
     print(f"\n[INFO] Granite full review + fix + global reorder took {time.time() - start_time:.2f} seconds.")
@@ -150,6 +156,7 @@ def run_simple_rag(tf_text: str) -> dict:
         "final_review": final_review,
         "corrected_code": final_code
     }
+
 
 def load_best_practices():
     best_practices = ""
@@ -160,50 +167,47 @@ def load_best_practices():
                 best_practices += file.read() + "\n---\n"
     return best_practices
 
-
 # --- Prompt templates ---
 
-REVIEW_PROMPT_TEMPLATE = """You are an expert Terraform code reviewer focused on enforcing IBM Cloud standards for `variables.tf`.
+REVIEW_PROMPT_TEMPLATE = """You are an expert Terraform reviewer enforcing IBM Cloud standards for `variables.tf` files.
 
 Apply the following internal best practices:
 {best_practices}
 
-So far, the review has identified these issues:
+The review so far has identified:
 {summary_section}
 
-Analyze this Terraform code chunk and provide structured feedback. Strictly follow these rules while renaming and reviewing variables:
-
+Analyze the following Terraform code chunk and provide bullet-point feedback. Strictly follow these rules when identifying issues or renaming variables:
 - Use `snake_case` for all variable names.
-- Expand non-standard abbreviations (e.g., sm → secrets_manager).
+- Expand non-standard abbreviations (e.g., `sm` → `secrets_manager`).
 - Preserve standard acronyms (`vpc`, `cos`, `kms`, `crn`).
-- Boolean variables must begin with `enable_`, `disable_`, or `use_`.
-- Suffix variable names with `_id`, `_name`, `_crn`, etc. where applicable.
-- Prefix with `existing_` if referencing an existing resource.
+- Boolean variable names must start with `enable_`, `disable_`, or `use_`.
+- Use suffixes like `_id`, `_name`, `_crn` where appropriate.
+- Prefix with `existing_` if referencing existing resources.
 - Group all `existing_*` variables before new ones.
-- Review the `description` fields. If they are unclear, inaccurate, or incorrect, fix them.
-- If a `description` is changed, add a comment line **above** the variable using the format: `# description updated`.
-- Do NOT touch `validation` blocks.
-- Do NOT explain anything — output only the corrected code, no extra text.
+- Do **not** modify `validation` blocks.
+- Only change `description` if it is inaccurate — append `#description updated`.
+- If `description` is missing, add a meaningful one — append `#description added`.
+- Do not explain — output bullet points only, no extra text.
 
 Terraform code chunk:
 {chunk}
 """
 
+FIX_PROMPT_TEMPLATE = """You are a Terraform expert improving a `variables.tf` chunk to comply with IBM Cloud naming and structure standards.
 
-FIX_PROMPT_TEMPLATE = """You are a Terraform expert improving a `variables.tf` chunk to meet IBM Cloud naming and documentation standards.
-
-Strictly follow these rules:
+Follow these rules exactly:
 - Use `snake_case` for all variable names.
-- Expand non-standard abbreviations (e.g., sm → secrets_manager).
+- Expand non-standard abbreviations (e.g., `sm` → `secrets_manager`).
 - Preserve standard acronyms (`vpc`, `cos`, `kms`, `crn`).
-- Boolean variables must begin with `enable_`, `disable_`, or `use_`.
-- Suffix variable names with `_id`, `_name`, `_crn`, etc. where applicable.
-- Prefix with `existing_` if referencing an existing resource.
+- Boolean variable names must start with `enable_`, `disable_`, or `use_`.
+- Use suffixes like `_id`, `_name`, `_crn` where appropriate.
+- Prefix with `existing_` if referencing existing resources.
 - Group all `existing_*` variables before new ones.
-- Review the `description` fields. If they are unclear, inaccurate, or misleading, correct them.
-- If you update a `description`, insert a comment above it: `# description updated`
-- Do NOT modify `validation` blocks.
-- Do NOT explain anything — output only the corrected code, no extra text.
+- Do **not** touch `validation` blocks.
+- Only update `description` if incorrect — append `#description updated`.
+- Add missing `description` fields — append `#description added`.
+- Do not explain — output only the corrected code, no extra text.
 
 Context:
 {context}
@@ -211,57 +215,46 @@ Context:
 Terraform code chunk:
 {chunk}
 
-Corrected Code:
+Corrected code:
 """
 
+FINAL_PROMPT_TEMPLATE = """You are generating a final Terraform `variables.tf` review by synthesizing chunk-level feedback and fixes.
 
-FINAL_PROMPT_TEMPLATE = """You are synthesizing a complete review of a Terraform `variables.tf` file based on chunk-level feedback and corrections.
+Output the following in markdown format only:
 
-Generate the following:
+### **Summary**
+(2–3 sentences summarizing major issues such as naming inconsistencies, grouping gaps, or structural problems.)
 
-1. **Summary (2–3 sentences)**:
-Summarize the main issues identified across all chunks (naming, grouping, structure).
-
-Variable Rename Table (Markdown):
+### **Variable Rename Table**
 | Current Name | Suggested Name |
 |--------------|----------------|
 {rename_table}
 
-Full Detailed Review:
+### **Detailed Review**
 {chunk_summaries}
 
-Provide only the markdown content, no extra explanation or disclaimers.
+Do not include explanations or commentary outside the markdown.
 """
 
-GLOBAL_REORDER_PROMPT = """You are an expert Terraform refactorer specializing in IBM Cloud best practices.
+GLOBAL_REORDER_PROMPT = """You are a Terraform expert refactoring a complete `variables.tf` file according to IBM Cloud best practices.
 
-Given a complete `variables.tf` file, reorder and group all variables based on the following rules:
+Reorder and group variables following these rules:
 
-1. **Group variable definitions**: Ensure all input variables are defined in this file with consistent structure and clear descriptions.
-
-2. **Prioritize and order variables for usability**:
-   - Place frequently used, high-priority variables at the very top in the following order (if present): `region`, `prefix`, `resource_group_id`, `ibmcloud_api_key`.
-   - These must appear at the top in the exact order above if they exist in the file.
-
-3. **Co-locate related variables**:
-   - Group variables by IBM Cloud service or domain such as `vpc`, `subnet`, `cluster`, `kms`, `code_engine`, `secrets_manager`, `logging`, etc.
-   - Keep each group contiguous and logically ordered for readability and discoverability.
-
-4. **Leverage sensible defaults**:
-   - If a variable has a sensible default, preserve it.
-   - Do not remove or alter existing defaults.
-   - Review `description` fields and update them only if incorrect or unclear.
-   - If a description is updated, insert a comment above it: `# description updated`
-   - Do not add or remove variables.
-
-5. **Do not modify validation blocks**:
-   - Retain any `validation` blocks exactly as they are.
-
-6. **Strict formatting rules**:
+1. **Group definitions**: Ensure all input variables are present, consistently structured, and include accurate descriptions.
+2. **Domain grouping**: Cluster related variables by domain (e.g., VPC, Cluster, Key Management, Logging, Secrets Manager).
+3. **Usability ordering**:
+   - Place variables without default values at the top.
+   - Then list high-priority variables like `region`, `prefix`, `ibm_cloud_api_key`.
+   - Follow with logically grouped domain blocks.
+4. **Preserve defaults**: Retain all existing sensible defaults.
+5. **Do not alter validation**: Preserve all `validation` and nested `policy` blocks exactly as-is.
+6. **Strict formatting**:
    - Use consistent spacing and indentation.
-   - Preserve all existing `description` fields unless updated as above.
-   - Output only the fully reordered `variables.tf` file — no explanations, no comments, no summaries.
+   - Do not change correct descriptions.
+7. **Do not add/remove any variables**.
 
-Terraform file to reorder:
+Input:
 {fixed_code}
+
+Output the fully reordered `variables.tf` file — no extra text or comments.
 """
