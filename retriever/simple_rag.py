@@ -13,19 +13,24 @@ MILVUS_HOST = os.getenv("MILVUS_HOST")
 MILVUS_PORT = os.getenv("MILVUS_PORT")
 COLLECTION_NAME = os.getenv("COLLECTION_NAME")
 
+
 def get_milvus_connection():
     try:
-        if utility.has_collection(COLLECTION_NAME):
-            print(f"Found collection {COLLECTION_NAME}")
+        if not utility.has_collection(COLLECTION_NAME):
+            print(f"[ERROR] Collection {COLLECTION_NAME} not found in Milvus!")
+            return None
+        print(f"[INFO] Found collection {COLLECTION_NAME}")
         collection = Collection(COLLECTION_NAME)
+        return collection
     except Exception as e:
         print(f"[ERROR] Failed to load collection from Milvus: {e}")
-    if not utility.has_collection(COLLECTION_NAME):
-        print(f"[ERROR] Collection {COLLECTION_NAME} not found in Milvus!")
-    return collection
+        return None
+
 
 def get_top_k_chunks(query_embedding, k=5):
     collection = get_milvus_connection()
+    if not collection:
+        return []
     collection.load()
     search_params = {"metric_type": "IP", "params": {"nprobe": 10}}
     search_results = collection.search(
@@ -38,9 +43,11 @@ def get_top_k_chunks(query_embedding, k=5):
     )
     return search_results[0]
 
-def extract_renamed_vars(review_text: str) -> list[tuple[str, str]]:
-    pattern = r'`?(\w+)`?\s*->\s*`?(\w+)`?'
+
+def extract_renamed_vars_with_reasons(review_text: str) -> list[tuple[str, str, str]]:
+    pattern = r'`?(\w+)`?\s*->\s*`?(\w+)`?(?:\s*:\s*(.*))?'
     return re.findall(pattern, review_text)
+
 
 def extract_validation_blocks(text: str) -> dict:
     variable_blocks = re.findall(r'(variable\s+"[^"]+"\s*{[^}]*?(validation\s*{[^}]*}[^}]*?)+})', text, re.DOTALL)
@@ -48,6 +55,7 @@ def extract_validation_blocks(text: str) -> dict:
         re.search(r'variable\s+"([^"]+)"', block[0]).group(1): block[0]
         for block in variable_blocks if re.search(r'variable\s+"([^"]+)"', block[0])
     }
+
 
 def reinsert_validation_blocks(original: str, fixed: str) -> str:
     original_blocks = extract_validation_blocks(original)
@@ -60,10 +68,8 @@ def reinsert_validation_blocks(original: str, fixed: str) -> str:
         )
     return fixed
 
+
 def global_reorder_fixed_code(fixed_code: str) -> str:
-    """
-    Call Granite LLM to reorder and group related variables globally after chunk fixes.
-    """
     prompt = GLOBAL_REORDER_PROMPT.format(fixed_code=fixed_code)
     try:
         reordered_code = query_granite(prompt).strip()
@@ -103,8 +109,8 @@ def run_simple_rag(tf_text: str) -> dict:
             )
             review_response = query_granite(review_prompt).strip()
             if review_response and not review_response.startswith("[Error"):
-                print(f"[INFO] Review response for chunk {i+1}: {review_response}")
-                renamed_variables.extend(extract_renamed_vars(review_response))
+                print(f"[INFO] Review response for chunk {i+1}:\n{review_response}")
+                renamed_variables.extend(extract_renamed_vars_with_reasons(review_response))
             else:
                 print(f"[ERROR] No valid review response for chunk {i+1}")
             all_chunk_feedback.append((i+1, review_response))
@@ -129,7 +135,8 @@ def run_simple_rag(tf_text: str) -> dict:
         if renamed_variables:
             unique_renames = sorted(set(renamed_variables))
             rename_table_rows = "\n".join(
-                f"| `{old}` | `{new}` |" for old, new in unique_renames if old != new
+                f"| `{old}` | `{new}` | {reason.strip() if reason else '_No reason provided_'} |"
+                for old, new, reason in unique_renames if old != new
             )
         else:
             rename_table_rows = "_No renaming suggestions found._"
@@ -139,18 +146,15 @@ def run_simple_rag(tf_text: str) -> dict:
             rename_table=rename_table_rows
         )
         final_review = query_granite(final_prompt).strip()
-        print(f"[INFO] Review response: {final_review}")
+        print(f"[INFO] Final review generated.")
     except Exception as e:
         print(f"[ERROR] Final review synthesis failed: {e}")
         final_review = "[ERROR] Could not generate consolidated review."
 
-    # Merge all fixed chunks into one string
     merged_fixed_code = "\n\n".join(corrected_chunks)
-
-    # NEW: Run global reorder step on the merged fixed code
     final_code = global_reorder_fixed_code(merged_fixed_code)
 
-    print(f"\n[INFO] Granite full review + fix + global reorder took {time.time() - start_time:.2f} seconds.")
+    print(f"\n[INFO] Total RAG review time: {time.time() - start_time:.2f} seconds.")
 
     return {
         "final_review": final_review,
@@ -158,14 +162,19 @@ def run_simple_rag(tf_text: str) -> dict:
     }
 
 
-def load_best_practices():
+def load_best_practices() -> str:
     best_practices = ""
     guide_folder = os.getenv("GUIDE_FOLDER_PATH")
+    if not guide_folder or not os.path.isdir(guide_folder):
+        print("[ERROR] GUIDE_FOLDER_PATH is not set or invalid.")
+        return best_practices
+
     for filename in os.listdir(guide_folder):
         if filename.endswith(".txt"):
             with open(os.path.join(guide_folder, filename), "r") as file:
                 best_practices += file.read() + "\n---\n"
     return best_practices
+
 
 # --- Prompt templates ---
 
@@ -180,7 +189,7 @@ The review so far has identified:
 Analyze the following Terraform code chunk and provide bullet-point feedback. Strictly follow these rules when identifying issues or renaming variables:
 - Use `snake_case` for all variable names.
 - Expand non-standard abbreviations (e.g., `sm` → `secrets_manager`).
-- Preserve standard acronyms (`vpc`, `cos`, `kms`, `crn`).
+- Preserve standard acronyms (`vpc`, `cos`, `kms`, `crn`, `ocp`, `vpe`).
 - Boolean variable names must start with `enable_`, `disable_`, or `use_`.
 - Use suffixes like `_id`, `_name`, `_crn` where appropriate.
 - Prefix with `existing_` if referencing existing resources.
@@ -189,6 +198,9 @@ Analyze the following Terraform code chunk and provide bullet-point feedback. St
 - Only change `description` if it is inaccurate — append `#description updated`.
 - If `description` is missing, add a meaningful one — append `#description added`.
 - Do not explain — output bullet points only, no extra text.
+
+For variable renaming suggestions, use this format:
+`old_name` -> `new_name`: reason
 
 Terraform code chunk:
 {chunk}
@@ -199,7 +211,7 @@ FIX_PROMPT_TEMPLATE = """You are a Terraform expert improving a `variables.tf` c
 Follow these rules exactly:
 - Use `snake_case` for all variable names.
 - Expand non-standard abbreviations (e.g., `sm` → `secrets_manager`).
-- Preserve standard acronyms (`vpc`, `cos`, `kms`, `crn`).
+- Preserve standard acronyms (`vpc`, `cos`, `kms`, `crn`, `ocp`, `vpe`).
 - Boolean variable names must start with `enable_`, `disable_`, or `use_`.
 - Use suffixes like `_id`, `_name`, `_crn` where appropriate.
 - Prefix with `existing_` if referencing existing resources.
@@ -226,8 +238,8 @@ Output the following in markdown format only:
 (2–3 sentences summarizing major issues such as naming inconsistencies, grouping gaps, or structural problems.)
 
 ### **Variable Rename Table**
-| Current Name | Suggested Name |
-|--------------|----------------|
+| Current Name | Suggested Name | Reason for the suggested change |
+|--------------|----------------|----------------------------------|
 {rename_table}
 
 ### **Detailed Review**
