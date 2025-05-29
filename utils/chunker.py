@@ -1,23 +1,65 @@
 import re
 
 def chunk_text(file_text: str, max_chars: int = 1500, file_type: str = 'tf') -> list:
-    """Splits the text into chunks."""
+    """Splits the text into chunks, and tracks line numbers for .tf files."""
     if file_type == 'tf':
-        # Terraform block-based chunking
-        variable_blocks = re.findall(r'(variable\s+".+?"\s*\{[^}]+\})', file_text, re.DOTALL)
+        lines = file_text.splitlines(keepends=True)
         chunks = []
-        current_chunk = ""
-        for block in variable_blocks:
-            block = block.strip()
-            if len(current_chunk) + len(block) > max_chars:
-                if current_chunk:
-                    chunks.append(current_chunk.strip())
-                current_chunk = block
-            else:
-                current_chunk += "\n\n" + block
-        if current_chunk:
-            chunks.append(current_chunk.strip())
+        current_chunk_lines = []
+        current_chunk_length = 0
+        current_start_line = None
+        inside_block = False
+        brace_count = 0
+
+        for idx, line in enumerate(lines):
+            if not inside_block and re.match(r'^\s*variable\s+"[^"]+"\s*\{', line):
+                inside_block = True
+                brace_count = line.count('{') - line.count('}')
+                current_chunk_lines = [line]
+                current_chunk_length = len(line)
+                current_start_line = idx + 1  # GitHub line numbers start at 1
+                continue
+
+            if inside_block:
+                current_chunk_lines.append(line)
+                current_chunk_length += len(line)
+                brace_count += line.count('{') - line.count('}')
+                
+                if brace_count == 0:
+                    block_text = ''.join(current_chunk_lines).strip()
+                    # Extract variable names and their line numbers in this block
+                    var_line_map = {}
+                    for offset, block_line in enumerate(current_chunk_lines):
+                        match = re.match(r'^\s*variable\s+"([^"]+)"', block_line)
+                        if match:
+                            var_name = match.group(1)
+                            var_line_map[var_name] = current_start_line + offset
+
+                    if not chunks or len(chunks[-1]['chunk']) + len(block_text) > max_chars:
+                        chunks.append({
+                            'chunk': block_text,
+                            'start_line': current_start_line,
+                            'var_line_map': var_line_map
+                        })
+                    else:
+                        # Merge with previous chunk
+                        prev = chunks.pop()
+                        merged_text = prev['chunk'] + "\n\n" + block_text
+                        # Merge var_line_maps, adjusting offset for merged block
+                        merged_map = prev['var_line_map'].copy()
+                        merged_map.update(var_line_map)
+                        chunks.append({
+                            'chunk': merged_text,
+                            'start_line': prev['start_line'],
+                            'var_line_map': merged_map
+                        })
+                    inside_block = False
+                    current_chunk_lines = []
+                    current_chunk_length = 0
+                    current_start_line = None
+
         return chunks
+
     else:
         # Hybrid chunking for .txt files (using paragraphs + sentences fallback strategy)
         paragraphs = file_text.split("\n\n")
@@ -47,7 +89,10 @@ def chunk_text(file_text: str, max_chars: int = 1500, file_type: str = 'tf') -> 
                         chunks.append(current_chunk.strip())
                     current_chunk = para
                 else:
-                    current_chunk += "\n\n" + para
+                    if current_chunk:
+                        current_chunk += "\n\n" + para
+                    else:
+                        current_chunk = para
 
         if current_chunk:
             chunks.append(current_chunk.strip())

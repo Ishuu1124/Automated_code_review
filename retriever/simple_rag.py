@@ -91,13 +91,17 @@ def run_simple_rag(tf_text: str) -> dict:
     all_chunk_feedback = []
     corrected_chunks = []
     running_summary = []
-    renamed_variables = []
+    renamed_variables_with_lines = []
     best_practices = load_best_practices()
 
-    for i, chunk in enumerate(review_chunks):
-        print(f"\n[INFO] Processing chunk {i + 1}/{len(review_chunks)}")
+    for i, chunk_info in enumerate(review_chunks):
+        chunk_text_str = chunk_info['chunk']
+        start_line = chunk_info.get('start_line', -1)
+        var_line_map = chunk_info.get('var_line_map', {})
+
+        print(f"\n[INFO] Processing chunk {i + 1}/{len(review_chunks)} (starting at line {start_line})")
         try:
-            embedding = np.array(embed_text(chunk))
+            embedding = np.array(embed_text(chunk_text_str))
             context_docs = get_top_k_chunks(embedding, k=5)
             context = "\n---\n".join([doc[2] for doc in context_docs])
             summary_section = "\n".join(running_summary[-5:]) or "No issues found yet."
@@ -105,12 +109,15 @@ def run_simple_rag(tf_text: str) -> dict:
             review_prompt = REVIEW_PROMPT_TEMPLATE.format(
                 best_practices=best_practices,
                 summary_section=summary_section,
-                chunk=chunk
+                chunk=chunk_text_str
             )
             review_response = query_granite(review_prompt).strip()
             if review_response and not review_response.startswith("[Error"):
                 print(f"[INFO] Review response for chunk {i+1}:\n{review_response}")
-                renamed_variables.extend(extract_renamed_vars_with_reasons(review_response))
+                for old, new, reason in extract_renamed_vars_with_reasons(review_response):
+                    # Get the actual line number of the variable inside the chunk if possible
+                    actual_line = var_line_map.get(old, start_line)
+                    renamed_variables_with_lines.append((old, new, reason, actual_line))
             else:
                 print(f"[ERROR] No valid review response for chunk {i+1}")
             all_chunk_feedback.append((i+1, review_response))
@@ -120,23 +127,32 @@ def run_simple_rag(tf_text: str) -> dict:
             all_chunk_feedback.append((i+1, "[ERROR] Review failed"))
             continue
 
+
         try:
-            fix_prompt = FIX_PROMPT_TEMPLATE.format(context=context, chunk=chunk)
+            fix_prompt = FIX_PROMPT_TEMPLATE.format(context=context, chunk=chunk_text_str)
             fix_response = query_granite(fix_prompt).strip()
-            fixed_with_validation = reinsert_validation_blocks(chunk, fix_response)
+            fixed_with_validation = reinsert_validation_blocks(chunk_text_str, fix_response)
             corrected_chunks.append(fixed_with_validation)
         except Exception as e:
             print(f"[ERROR] Fix failed for chunk {i+1}: {e}")
-            corrected_chunks.append(chunk)
+            corrected_chunks.append(chunk_text_str)
 
     feedbacks = "\n\n".join([f"Chunk {i}:\n{resp}" for i, resp in all_chunk_feedback])
 
     try:
-        if renamed_variables:
-            unique_renames = sorted(set(renamed_variables))
+        if renamed_variables_with_lines:
+            # Sort and deduplicate
+            seen = set()
+            unique_renames = []
+            for old, new, reason, line in renamed_variables_with_lines:
+                key = (old, new)
+                if old != new and key not in seen:
+                    unique_renames.append((old, new, reason, line))
+                    seen.add(key)
+
             rename_table_rows = "\n".join(
-                f"| `{old}` | `{new}` | {reason.strip() if reason else '_No reason provided_'} |"
-                for old, new, reason in unique_renames if old != new
+                f"| `{old}` | `{new}` | {reason.strip() if reason else '_No reason provided_'} | {line} |"
+                for old, new, reason, line in unique_renames
             )
         else:
             rename_table_rows = "_No renaming suggestions found._"
@@ -160,7 +176,6 @@ def run_simple_rag(tf_text: str) -> dict:
         "final_review": final_review,
         "corrected_code": final_code
     }
-
 
 def load_best_practices() -> str:
     best_practices = ""
@@ -238,8 +253,8 @@ Output the following in markdown format only:
 (2–3 sentences summarizing major issues such as naming inconsistencies, grouping gaps, or structural problems.)
 
 ### **Variable Rename Table**
-| Current Name | Suggested Name | Reason for the suggested change |
-|--------------|----------------|----------------------------------|
+| Current Name | Suggested Name | Reason for the suggested change | Line Number |
+|--------------|----------------|----------------------------------|-------------|
 {rename_table}
 
 ### **Detailed Review**
@@ -247,6 +262,7 @@ Output the following in markdown format only:
 
 Do not include explanations or commentary outside the markdown.
 """
+
 
 GLOBAL_REORDER_PROMPT = """You are a Terraform expert refactoring a complete `variables.tf` file according to IBM Cloud best practices.
 
