@@ -210,12 +210,13 @@ Analyze the following Terraform code chunk and provide bullet-point feedback. St
 - Prefix with `existing_` if referencing existing resources.
 - Group all `existing_*` variables before new ones.
 - Do **not** modify `validation` blocks.
-- Only change `description` if it is inaccurate — append `#description updated`.
-- If `description` is missing, add a meaningful one — append `#description added`.
+- Only update the `description` field if incorrect — in that case, add a new comment line directly **above** the `description` line containing `#description updated`.
+- If the `description` is missing, add a meaningful one, and **add a comment line immediately below**: `#description added`.
 - Do not explain — output bullet points only, no extra text.
+- Do not suggest renaming the same variable more than once across chunks.
 
 For variable renaming suggestions, use this format:
-`old_name` -> `new_name`: reason
+`old_name` -> `new_name`: Provide a short, clear reason. Do **not** start the reason with "reason:".
 
 Terraform code chunk:
 {chunk}
@@ -232,9 +233,12 @@ Follow these rules exactly:
 - Prefix with `existing_` if referencing existing resources.
 - Group all `existing_*` variables before new ones.
 - Do **not** touch `validation` blocks.
-- Only update `description` if incorrect — append `#description updated`.
-- Add missing `description` fields — append `#description added`.
-- Do not explain — output only the corrected code, no extra text.
+- Only update the `description` field if it is incorrect or missing.
+- If the `description` is incorrect, keep the updated `description` field, and **add a new line directly above it with** `#description updated` as a comment — **do not include this tag inside the description string**.
+- If the `description` is missing, add a meaningful one, and **add a comment line immediately below**: `#description added`.
+- Do not repeat or duplicate variable definitions across the file.
+- Do not rename a variable if it has already been renamed in a previous chunk.
+- Output only the corrected Terraform code — no extra text.
 
 Context:
 {context}
@@ -261,28 +265,42 @@ Output the following in markdown format only:
 {chunk_summaries}
 
 Do not include explanations or commentary outside the markdown.
+Ensure the rename table reflects only actual changes made and is deduplicated.
+Ensure the "Reason for the suggested change" is clear and concise. Do **not** start reasons with “reason:”.
 """
-
 
 GLOBAL_REORDER_PROMPT = """You are a Terraform expert refactoring a complete `variables.tf` file according to IBM Cloud best practices.
 
-Reorder and group variables following these rules:
+Reorder and group variables following these exact rules:
 
-1. **Group definitions**: Ensure all input variables are present, consistently structured, and include accurate descriptions.
-2. **Domain grouping**: Cluster related variables by domain (e.g., VPC, Cluster, Key Management, Logging, Secrets Manager).
-3. **Usability ordering**:
-   - Place variables without default values at the top.
-   - Then list high-priority variables like `region`, `prefix`, `ibm_cloud_api_key`.
-   - Follow with logically grouped domain blocks.
-4. **Preserve defaults**: Retain all existing sensible defaults.
-5. **Do not alter validation**: Preserve all `validation` and nested `policy` blocks exactly as-is.
-6. **Strict formatting**:
-   - Use consistent spacing and indentation.
-   - Do not change correct descriptions.
-7. **Do not add/remove any variables**.
+1. **Deduplicate**:
+   - Do not allow the same logical input to be defined multiple times with different names (e.g., `existing_api_key` and `ibmcloud_api_key`).
+   - Keep only one canonical version of any overlapping or renamed variable.
+   - Prefer IBM Cloud standard names such as `ibmcloud_api_key`, `region`, and `prefix` where applicable.
 
+2. **Ordering by Defaults**:
+   - Place all variables that do **not** have `default =` at the **top** of the file.
+   - Then place variables **with defaults** afterward.
+
+3. **Domain Grouping**:
+   - Cluster variables into logical blocks by their usage (e.g., Secrets Manager, VPC, Resource Group, Tags, Logging).
+   - Group all `existing_*` variables before new ones in their domain.
+
+4. **High-priority input variables**:
+   - Within the "no default" block, order as follows: `ibmcloud_api_key`, `region`, `prefix`.
+
+5. **Preserve values**:
+   - Keep all default values as-is.
+   - Do not alter validation or policy blocks.
+
+6. **Formatting**:
+   - Use consistent indentation.
+   - Ensure every variable block is complete and syntactically valid.
+   - Remove any duplicated or conflicting definitions.
+
+Your output must include only valid, clean, deduplicated, and fully reordered Terraform code. Do not add, repeat, or keep multiple definitions for the same logical variable.
 Input:
 {fixed_code}
 
-Output the fully reordered `variables.tf` file — no extra text or comments.
+Output:
 """
