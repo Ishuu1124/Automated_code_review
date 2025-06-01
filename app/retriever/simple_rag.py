@@ -4,7 +4,7 @@ import time
 import numpy as np
 from dotenv import load_dotenv
 from pymilvus import Collection, utility
-from app.models.granite_model import query_granite, embed_text
+from app.models.granite_model import query_watsonx, embed_watson, query_granite, embed_text
 from app.utils.chunker import chunk_text
 from app.db.indexer import db
 
@@ -50,7 +50,7 @@ def run_simple_rag(tf_text: str) -> dict:
     for i, chunk in enumerate(review_chunks):
         print(f"\n[INFO] Processing chunk {i + 1}/{len(review_chunks)}")
         try:
-            embedding = np.array(embed_text(chunk))
+            embedding = np.array(embed_watson(chunk))
             context_docs = db.get_top_k_chunks(embedding, 5)
             context = "\n---\n".join([doc[2] for doc in context_docs])
             summary_section = "\n".join(running_summary[-5:]) or "No issues found yet."
@@ -60,7 +60,7 @@ def run_simple_rag(tf_text: str) -> dict:
                 summary_section=summary_section,
                 chunk=chunk
             )
-            review_response = query_granite(review_prompt).strip()
+            review_response = query_watsonx(review_prompt).strip()
             if review_response and not review_response.startswith("[Error"):
                 print(f"[INFO] Review response for chunk {i+1}: {review_response}")
                 renamed_variables.extend(extract_renamed_vars(review_response))
@@ -75,7 +75,7 @@ def run_simple_rag(tf_text: str) -> dict:
 
         try:
             fix_prompt = FIX_PROMPT_TEMPLATE.format(context=context, chunk=chunk)
-            fix_response = query_granite(fix_prompt).strip()
+            fix_response = query_watsonx(fix_prompt).strip()
             fixed_with_validation = reinsert_validation_blocks(chunk, fix_response)
             corrected_chunks.append(fixed_with_validation)
         except Exception as e:
@@ -100,7 +100,7 @@ def run_simple_rag(tf_text: str) -> dict:
             chunk_summaries=feedbacks,
             rename_table=rename_table
         )
-        final_review = query_granite(final_prompt).strip()
+        final_review = query_watsonx(final_prompt).strip()
         print(f"[INFO] Review response: {final_review}")
     except Exception as e:
         print(f"[ERROR] Final review synthesis failed: {e}")

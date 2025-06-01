@@ -22,8 +22,8 @@ def process_webhook(owner: str, repo_name: str, pr_num: int, command: str):
     redis_key = commit_id + command[1:]
     # Create a placeholder comment
     comment_id = issue.create_comment("Request received, processing...").id
-    code_to_review = get_variables_code(repository, pull)
-    code = code_to_review[0]
+    code = get_variables_code(repository, pull)
+    # code = code_to_review[0]
     if code is None:
         issue.get_comment(comment_id).edit("No content found in variables.tf")
         return {
@@ -33,7 +33,7 @@ def process_webhook(owner: str, repo_name: str, pr_num: int, command: str):
     # Check Redis cache
     cache_value = redis_client.hget("Tf cache", redis_key)
     if cache_value is None:
-        index_docs("src/guide")
+        index_docs("app/guide")
         result = evaluate(code)
         # Populate cache
         redis_client.hset("Tf cache", redis_key, json.dumps(result))

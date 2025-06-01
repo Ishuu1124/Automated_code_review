@@ -41,11 +41,11 @@ def get_variables_code(
     
     for changed_file in changed_files:
         print(changed_file.filename)
-        if changed_file.filename in files_to_check:
+        if changed_file.filename == 'variables.tf':
             try:
                 code = repository.get_contents(changed_file.filename, ref=head_sha)
                 code = code.decoded_content.decode("utf-8")
-                code_to_review.append(code)
+                # code_to_review.append(code)
             except Exception as e:
                 return None
-    return code_to_review
+    return code

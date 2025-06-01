@@ -1,1 +1,1 @@
-from .granite_model import query_granite
+from .granite_model import query_granite,query_watsonx

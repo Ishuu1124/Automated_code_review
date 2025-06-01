@@ -10,7 +10,7 @@ from app.db.dbFactory import dbFactory
 
 
 load_dotenv()
-DATA_DIR = "src/guide"
+DATA_DIR = "app/guide"
 model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
