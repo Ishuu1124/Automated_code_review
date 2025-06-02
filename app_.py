@@ -3,7 +3,7 @@ import os
 import sys
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 from retriever.simple_rag import run_simple_rag
-from evaluator.scorer import score_response, answer_length, keyword_overlap
+# from evaluator.scorer import score_response, answer_length, keyword_overlap
 import glob
 from app.ghub import evaluate_tf_from_github
 def evaluate_multiple_tf_files(tf_folder):
@@ -23,8 +23,8 @@ def evaluate_multiple_tf_files(tf_folder):
     print("\n--- Corrected Code ---")
     print(corrected)
     print("\n--- Metrics ---")
-    print(f"Score: {score_response(combined_content, review):.2f}")
-    print(f"Length: {answer_length(review)} tokens")
+    # print(f"Score: {score_response(combined_content, review):.2f}")
+    # print(f"Length: {answer_length(review)} tokens")
     
 if __name__ == "__main__":
     # evaluate_multiple_tf_files("sample_tf")

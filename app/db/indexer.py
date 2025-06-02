@@ -2,16 +2,17 @@ import os
 import time
 import glob
 import hashlib
-from sentence_transformers import SentenceTransformer
+# from sentence_transformers import SentenceTransformer
 from dotenv import load_dotenv
 from pymilvus import Collection, connections
 from app.utils.chunker import chunk_text
 from app.db.dbFactory import dbFactory
+from app.models.granite_model import embed_watson
 
 
 load_dotenv()
 DATA_DIR = "app/guide"
-model = SentenceTransformer("all-MiniLM-L6-v2")
+# model = SentenceTransformer("all-MiniLM-L6-v2")
 
 
 db = dbFactory.makedb("postgres")
@@ -29,9 +30,12 @@ def index_docs(folder=DATA_DIR):
 
         ext = os.path.splitext(path)[1].lower()
         file_type = "tf" if ext == ".tf" else "txt"
-        chunks = chunk_text(content, file_type=file_type)
-
-        embeddings = model.encode(chunks, batch_size=32, show_progress_bar=True)
+        chunks = chunk_text(content, file_type=file_type, max_chars=1000)
+        embeddings = []
+        for chunk in chunks:
+            embedding = embed_watson(chunk)
+            embeddings.append(embedding)
+            print('embedded chunk: ', chunk)
         for i, (chunk, embedding) in enumerate(zip(chunks, embeddings)):
             content_hash = hashlib.sha256(chunk.encode("utf-8")).hexdigest()
             db.add_index(path, i, chunk, content_hash, embedding)

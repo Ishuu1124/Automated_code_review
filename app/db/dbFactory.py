@@ -81,7 +81,7 @@ class Postgres(db):
                             content = EXCLUDED.content,
                             content_hash = EXCLUDED.content_hash,
                             embedding = EXCLUDED.embedding;
-                    """, (path, chunk_index, content, content_hash, embedding.tolist()))
+                    """, (path, chunk_index, content, content_hash, embedding))
                 self.conn.commit()
             return 0
         except Exception as e:
