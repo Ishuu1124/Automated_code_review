@@ -7,7 +7,9 @@ RUN pip install --no-cache-dir --prefix=/install -r requirements.txt
 
 FROM python:3.11.12-slim
 
-WORKDIR /app
+WORKDIR /tfreview
+
+ENV PYTHONPATH=/tfreview
 
 COPY --from=builder /install /usr/local
 

@@ -7,7 +7,7 @@ class CeleryRedisSettings(BaseSettings):
     CELERY_RESULT_BACKEND: str
     REDIS_URL: str
     
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    model_config = SettingsConfigDict()
 
 @lru_cache
 def load_settings()-> CeleryRedisSettings:
