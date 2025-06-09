@@ -11,6 +11,7 @@ VALID_NETLOCS = [
     "www.github.com",
 ]
 
+
 def parse_github_url(url: str):
     try:
         if not url.startswith(("http://", "https://")):
@@ -21,17 +22,18 @@ def parse_github_url(url: str):
         path_parts = parsed_url.path.strip("/").split("/")
         owner, repository_name = path_parts[0], path_parts[1]
         return (owner, repository_name)
-    except Exception as e:
-        raise ValueError(f"Error parsing GitHub PR URL!")
-    
+    except Exception:
+        raise ValueError("Error parsing GitHub PR URL!")
+
+
 def evaluate_tf_from_github(repo_url: str):
     (owner, repo_name) = parse_github_url(repo_url)
     g = Github(os.getenv("GITHUB_TOKEN"))
     try:
         repo = g.get_repo(f"{owner}/{repo_name}")
-    except:
+    except Exception:
         repo = g.get_organization(owner).get_repo(repo_name)
-    f = repo.get_contents('variables.tf')
+    f = repo.get_contents("variables.tf")
     content = f.decoded_content.decode()
     print(f"\nEvaluating variables.tf file from: {repo_url}")
     print("=" * 60)
@@ -44,8 +46,9 @@ def evaluate_tf_from_github(repo_url: str):
     print(f"Score: {score_response(content, result['final_review']):.2f}")
     print(f"Length: {answer_length(result['final_review'])} tokens")
 
+
 def evaluate(code: str):
-    print(f"\nEvaluating...")
+    print("\nEvaluating...")
     print("=" * 60)
     try:
         result = run_simple_rag(tf_text=code)
@@ -63,7 +66,4 @@ def evaluate(code: str):
     print("\n--- Metrics ---")
     print(f"Score: {score_response(code, final_review):.2f}")
     print(f"Length: {answer_length(final_review)} tokens")
-    return {
-        "final_review": final_review,
-        "corrected_code": corrected_code
-    }
+    return {"final_review": final_review, "corrected_code": corrected_code}

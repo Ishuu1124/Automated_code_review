@@ -1,7 +1,7 @@
-import time
 from sentence_transformers import SentenceTransformer, util
 
-embedder = SentenceTransformer('all-MiniLM-L6-v2')
+embedder = SentenceTransformer("all-MiniLM-L6-v2")
+
 
 def score_response(query: str, response: str) -> float:
     query_emb = embedder.encode(query, convert_to_tensor=True)
@@ -9,8 +9,10 @@ def score_response(query: str, response: str) -> float:
     similarity = util.pytorch_cos_sim(query_emb, response_emb)[0].item()
     return round(similarity, 4)
 
+
 def answer_length(response: str) -> int:
     return len(response.split())
+
 
 def keyword_overlap(query: str, response: str) -> float:
     query_tokens = set(query.lower().split())

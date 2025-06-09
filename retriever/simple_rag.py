@@ -39,21 +39,24 @@ def get_top_k_chunks(query_embedding, k=5):
         param=search_params,
         limit=k,
         expr=None,
-        output_fields=["path", "chunk_index", "content"]
+        output_fields=["path", "chunk_index", "content"],
     )
     return search_results[0]
 
 
 def extract_renamed_vars_with_reasons(review_text: str) -> list[tuple[str, str, str]]:
-    pattern = r'`?(\w+)`?\s*->\s*`?(\w+)`?(?:\s*:\s*(.*))?'
+    pattern = r"`?(\w+)`?\s*->\s*`?(\w+)`?(?:\s*:\s*(.*))?"
     return re.findall(pattern, review_text)
 
 
 def extract_validation_blocks(text: str) -> dict:
-    variable_blocks = re.findall(r'(variable\s+"[^"]+"\s*{[^}]*?(validation\s*{[^}]*}[^}]*?)+})', text, re.DOTALL)
+    variable_blocks = re.findall(
+        r'(variable\s+"[^"]+"\s*{[^}]*?(validation\s*{[^}]*}[^}]*?)+})', text, re.DOTALL
+    )
     return {
         re.search(r'variable\s+"([^"]+)"', block[0]).group(1): block[0]
-        for block in variable_blocks if re.search(r'variable\s+"([^"]+)"', block[0])
+        for block in variable_blocks
+        if re.search(r'variable\s+"([^"]+)"', block[0])
     }
 
 
@@ -64,7 +67,7 @@ def reinsert_validation_blocks(original: str, fixed: str) -> str:
             rf'(variable\s+"{re.escape(var_name)}"\s*{{)(.*?)(}})',
             lambda m: original_block,
             fixed,
-            flags=re.DOTALL
+            flags=re.DOTALL,
         )
     return fixed
 
@@ -95,11 +98,13 @@ def run_simple_rag(tf_text: str) -> dict:
     best_practices = load_best_practices()
 
     for i, chunk_info in enumerate(review_chunks):
-        chunk_text_str = chunk_info['chunk']
-        start_line = chunk_info.get('start_line', -1)
-        var_line_map = chunk_info.get('var_line_map', {})
+        chunk_text_str = chunk_info["chunk"]
+        start_line = chunk_info.get("start_line", -1)
+        var_line_map = chunk_info.get("var_line_map", {})
 
-        print(f"\n[INFO] Processing chunk {i + 1}/{len(review_chunks)} (starting at line {start_line})")
+        print(
+            f"\n[INFO] Processing chunk {i + 1}/{len(review_chunks)} (starting at line {start_line})"
+        )
         try:
             embedding = np.array(embed_text(chunk_text_str))
             context_docs = get_top_k_chunks(embedding, k=5)
@@ -109,29 +114,34 @@ def run_simple_rag(tf_text: str) -> dict:
             review_prompt = REVIEW_PROMPT_TEMPLATE.format(
                 best_practices=best_practices,
                 summary_section=summary_section,
-                chunk=chunk_text_str
+                chunk=chunk_text_str,
             )
             review_response = query_granite(review_prompt).strip()
             if review_response and not review_response.startswith("[Error"):
                 print(f"[INFO] Review response for chunk {i+1}:\n{review_response}")
-                for old, new, reason in extract_renamed_vars_with_reasons(review_response):
+                for old, new, reason in extract_renamed_vars_with_reasons(
+                    review_response
+                ):
                     # Get the actual line number of the variable inside the chunk if possible
                     actual_line = var_line_map.get(old, start_line)
                     renamed_variables_with_lines.append((old, new, reason, actual_line))
             else:
                 print(f"[ERROR] No valid review response for chunk {i+1}")
-            all_chunk_feedback.append((i+1, review_response))
+            all_chunk_feedback.append((i + 1, review_response))
             running_summary.append(review_response)
         except Exception as e:
             print(f"[ERROR] Review failed for chunk {i+1}: {e}")
-            all_chunk_feedback.append((i+1, "[ERROR] Review failed"))
+            all_chunk_feedback.append((i + 1, "[ERROR] Review failed"))
             continue
 
-
         try:
-            fix_prompt = FIX_PROMPT_TEMPLATE.format(context=context, chunk=chunk_text_str)
+            fix_prompt = FIX_PROMPT_TEMPLATE.format(
+                context=context, chunk=chunk_text_str
+            )
             fix_response = query_granite(fix_prompt).strip()
-            fixed_with_validation = reinsert_validation_blocks(chunk_text_str, fix_response)
+            fixed_with_validation = reinsert_validation_blocks(
+                chunk_text_str, fix_response
+            )
             corrected_chunks.append(fixed_with_validation)
         except Exception as e:
             print(f"[ERROR] Fix failed for chunk {i+1}: {e}")
@@ -158,11 +168,10 @@ def run_simple_rag(tf_text: str) -> dict:
             rename_table_rows = "_No renaming suggestions found._"
 
         final_prompt = FINAL_PROMPT_TEMPLATE.format(
-            chunk_summaries=feedbacks,
-            rename_table=rename_table_rows
+            chunk_summaries=feedbacks, rename_table=rename_table_rows
         )
         final_review = query_granite(final_prompt).strip()
-        print(f"[INFO] Final review generated.")
+        print("[INFO] Final review generated.")
     except Exception as e:
         print(f"[ERROR] Final review synthesis failed: {e}")
         final_review = "[ERROR] Could not generate consolidated review."
@@ -172,10 +181,8 @@ def run_simple_rag(tf_text: str) -> dict:
 
     print(f"\n[INFO] Total RAG review time: {time.time() - start_time:.2f} seconds.")
 
-    return {
-        "final_review": final_review,
-        "corrected_code": final_code
-    }
+    return {"final_review": final_review, "corrected_code": final_code}
+
 
 def load_best_practices() -> str:
     best_practices = ""
