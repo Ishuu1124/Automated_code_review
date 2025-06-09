@@ -16,3 +16,5 @@ COPY --from=builder /install /usr/local
 COPY . .
 
 EXPOSE 8080
+
+CMD [ "./app/start_celery.sh" ]

@@ -7,10 +7,8 @@ psycopg-binary==3.2.6
 psycopg-pool==3.2.6
 pydantic_settings==2.9.1
 PyGithub==2.6.1
-PyGithub==2.6.1
 pymilvus==2.5.8
 python-dotenv==1.1.0
-PyYAML==6.0.2
 PyYAML==6.0.2
 redis==5.2.1
 Requests==2.32.3

@@ -46,11 +46,11 @@ def evaluate_tf_from_github(repo_url: str):
     # print(f"Score: {score_response(content, result['final_review']):.2f}")
     # print(f"Length: {answer_length(result['final_review'])} tokens")
 
-def evaluate(code: str):
+def evaluate(code: str, owner: str, repo_name: str, branch_name: str):
     print(f"\nEvaluating...")
     print("=" * 60)
     try:
-        result = run_simple_rag(tf_text=code)
+        result = run_simple_rag(code, owner, repo_name, branch_name)
     except Exception as e:
         print(f"Evaluation failed: {e}")
         result = None
