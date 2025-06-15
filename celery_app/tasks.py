@@ -43,7 +43,7 @@ def process_webhook(payload_json, command):
     corrected_code = result.get("corrected_code", "")
     final_output = ""
     if final_review:
-        final_output += f"## Final Review\n\n{final_review}\n\n"
+        final_output += f"## Review\n\n{final_review}\n\n"
     if corrected_code:
         final_output += f"## Corrected variables.tf\n\n```hcl\n{corrected_code}\n```"
     if not final_output:
