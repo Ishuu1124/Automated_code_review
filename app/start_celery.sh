@@ -5,7 +5,5 @@ echo $(pwd)
 echo "[$(date)] Initiating start..."
 
 celery -A app.celery_app.worker.celery_app worker --loglevel=info --pool=threads --concurrency=10 &
-
-sleep 30
-
-python -m http.server 8080
+echo "[$(date)] Celery worker started." &
+uvicorn app.api.app:app --host 0.0.0.0 --port 8000 --reload
