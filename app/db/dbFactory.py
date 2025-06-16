@@ -37,6 +37,7 @@ class Postgres(db):
         self.DB_PASSWORD:str = os.getenv("DB_PASSWORD", "")
         self.DB_HOST:str = os.getenv("DB_HOST", "localhost")
         self.DB_PORT:str = os.getenv("DB_PORT", "5432")
+        print(self.DB_NAME, self.DB_HOST, self.DB_PASSWORD, self.DB_PORT, self.DB_USER)
         self.conn = psycopg.connect(
             dbname=self.DB_NAME,
             user=self.DB_USER,

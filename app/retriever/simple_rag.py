@@ -233,6 +233,7 @@ Output the following in markdown format only:
 Do not include explanations or commentary outside the markdown.
 Ensure the rename table reflects only actual changes made and is deduplicated.
 Ensure the "Reason for the suggested change" is clear and concise. Do **not** start reasons with “reason:”.
+Do not make changes to the links to the code lines, as they are already formatted correctly.
 """
 
 GLOBAL_REORDER_PROMPT = """You are a Terraform expert refactoring a complete `variables.tf` file according to IBM Cloud best practices.
